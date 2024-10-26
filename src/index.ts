@@ -35,7 +35,7 @@ function parseIn1(s: string): In1 | undefined {
   return rows;
 }
 
-function parseIn2(s: string): In1 | undefined {
+function parseIn2(s: string): In2 | undefined {
   const rows = parse(s);
   if (!Array.isArray(rows)) {
     return undefined;
