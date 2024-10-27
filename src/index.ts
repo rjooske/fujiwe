@@ -12,9 +12,18 @@ function mustGetElementById(id: string): HTMLElement {
   return e;
 }
 
-type In1 = [string, string][];
-type In2 = [string][];
-type In3 = [string, string, string][];
+declare const nominalIdentifier: unique symbol;
+type Nominal<T, Identifier> = T & { [nominalIdentifier]: Identifier };
+
+type StudentId = Nominal<string, "StudentId">;
+type CourseId = Nominal<string, "CourseId">;
+type Email = Nominal<string, "Email">;
+
+type StudentContact = { schoolEmail: Email; personalEmail: Email };
+
+type In1 = Map<StudentId, CourseId>;
+type In2 = Map<StudentId, true>;
+type In3 = Map<StudentId, StudentContact>;
 
 function parseIn1(s: string): In1 | undefined {
   const rows = parse(s);
@@ -33,7 +42,12 @@ function parseIn1(s: string): In1 | undefined {
       return undefined;
     }
   }
-  return rows;
+
+  const in1: In1 = new Map();
+  for (const [studentId, courseId] of rows) {
+    in1.set(studentId, courseId);
+  }
+  return in1;
 }
 
 function parseIn2(s: string): In2 | undefined {
@@ -48,7 +62,12 @@ function parseIn2(s: string): In2 | undefined {
       return undefined;
     }
   }
-  return rows;
+
+  const in2: In2 = new Map();
+  for (const [studentId] of rows) {
+    in2.set(studentId, true);
+  }
+  return in2;
 }
 
 function parseIn3(s: string): In3 | undefined {
@@ -69,23 +88,78 @@ function parseIn3(s: string): In3 | undefined {
       return undefined;
     }
   }
-  return rows;
+
+  const in3: In3 = new Map();
+  for (const [studentId, schoolEmail, personalEmail] of rows) {
+    in3.set(studentId, { schoolEmail, personalEmail });
+  }
+  return in3;
 }
 
-function displayStudents(
-  studentIds: string[],
-  studentIdToEmail: Map<string, [string, string]>,
-): string {
-  return studentIds
-    .map((id) => {
-      const email = studentIdToEmail.get(id);
-      if (email === undefined) {
-        return `${id} (email unknown)`;
-      } else {
-        return `${id} ${email[0]} ${email[1]}`;
-      }
-    })
-    .join("\n");
+type MissingStudent = {
+  id: StudentId;
+  contact: StudentContact | undefined;
+  wrongCourseId: CourseId | undefined;
+};
+type SuperfluousStudent = {
+  id: StudentId;
+  contact: StudentContact | undefined;
+};
+type VerifyResult = {
+  missingStudents: MissingStudent[];
+  superfluousStudents: SuperfluousStudent[];
+};
+
+function verify(
+  in1: In1,
+  in2: In2,
+  in3: In3,
+  courseId: CourseId,
+): VerifyResult {
+  const missingStudents: MissingStudent[] = [];
+  const superfluousStudents: SuperfluousStudent[] = [];
+
+  for (const studentId of in2.keys()) {
+    const actualTakenCourseId = in1.get(studentId);
+    if (actualTakenCourseId === undefined) {
+      // Student hasn't registered any course
+      missingStudents.push({
+        id: studentId,
+        contact: in3.get(studentId),
+        wrongCourseId: undefined,
+      });
+    } else if (actualTakenCourseId !== courseId) {
+      // Student has registered the wrong course
+      missingStudents.push({
+        id: studentId,
+        contact: in3.get(studentId),
+        wrongCourseId: actualTakenCourseId,
+      });
+    }
+  }
+
+  for (const [studentId, actualTakenCourseId] of in1.entries()) {
+    // Student took the `courseId` course even though they don't have to
+    if (actualTakenCourseId === courseId && !in2.has(studentId)) {
+      superfluousStudents.push({
+        id: studentId,
+        contact: in3.get(studentId),
+      });
+    }
+  }
+
+  return {
+    missingStudents,
+    superfluousStudents,
+  };
+}
+
+function displayMaybeStudentContact(c: StudentContact | undefined): string {
+  if (c === undefined) {
+    return "(メアド不明)";
+  } else {
+    return `学校: ${c.schoolEmail} 個人: ${c.personalEmail}`;
+  }
 }
 
 function main() {
@@ -112,53 +186,24 @@ function main() {
     const courseId = courseIdElement.value;
     assert(in1 !== undefined && in2 !== undefined && in3 !== undefined);
 
-    const studentIdToEmail = new Map<string, [string, string]>();
-    for (const [studentId, schoolEmail, personalEmail] of in3) {
-      studentIdToEmail.set(studentId, [schoolEmail, personalEmail]);
-    }
-
-    const studentIdToCourseId = new Map<string, string>();
-    for (const [studentId, courseId] of in1) {
-      studentIdToCourseId.set(studentId, courseId);
-    }
-
-    const shouldTakeCourseStudentIds = new Map<string, true>();
-    for (const [studentId] of in2) {
-      shouldTakeCourseStudentIds.set(studentId, true);
-    }
-
-    const mistakeIds: string[] = [];
-    const unnecessaryIds: string[] = [];
-
-    for (const studentId of shouldTakeCourseStudentIds.keys()) {
-      const actualTakenCourseId = studentIdToCourseId.get(studentId);
-      if (actualTakenCourseId === undefined) {
-        // NOTE: student hasn't registered a course
-        mistakeIds.push(studentId);
-        continue;
-      }
-      if (actualTakenCourseId !== courseId) {
-        mistakeIds.push(studentId);
-      }
-    }
-
-    for (const [
-      studentId,
-      actualTakenCourseId,
-    ] of studentIdToCourseId.entries()) {
-      if (
-        actualTakenCourseId === courseId &&
-        !shouldTakeCourseStudentIds.has(studentId)
-      ) {
-        unnecessaryIds.push(studentId);
-      }
-    }
-
+    const result = verify(in1, in2, in3, courseId as CourseId);
     outElement.innerHTML = `この授業を取らなくていいのに取っている学生:
-${displayStudents(unnecessaryIds, studentIdToEmail)}
+${result.superfluousStudents
+  .map((s) => `${s.id} ${displayMaybeStudentContact(s.contact)}`)
+  .join("\n")}
 
 この授業を取らないといけないのに取っていない学生:
-${displayStudents(mistakeIds, studentIdToEmail)}
+${result.missingStudents
+  .map((s) => {
+    let reason: string;
+    if (s.wrongCourseId === undefined) {
+      reason = "履修登録なし";
+    } else {
+      reason = `${s.wrongCourseId}を誤登録`;
+    }
+    return `${s.id} 理由: ${reason} ${displayMaybeStudentContact(s.contact)}`;
+  })
+  .join("\n")}
 `;
   });
 }
