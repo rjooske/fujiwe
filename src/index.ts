@@ -162,13 +162,22 @@ function displayMaybeStudentContact(c: StudentContact | undefined): string {
   }
 }
 
+function displayMissingReason(courseId: CourseId | undefined): string {
+  if (courseId === undefined) {
+    return "履修登録なし";
+  } else {
+    return `${courseId}を誤登録`;
+  }
+}
+
 function main() {
   const in1Element = mustGetElementById("in1");
   const in2Element = mustGetElementById("in2");
   const in3Element = mustGetElementById("in3");
   const courseIdElement = mustGetElementById("course-id");
   const verifyElement = mustGetElementById("verify");
-  const outElement = mustGetElementById("out");
+  const out1Element = mustGetElementById("out1");
+  const out2Element = mustGetElementById("out2");
 
   assert(
     in1Element instanceof HTMLTextAreaElement &&
@@ -176,7 +185,8 @@ function main() {
       in3Element instanceof HTMLTextAreaElement &&
       courseIdElement instanceof HTMLInputElement &&
       verifyElement instanceof HTMLButtonElement &&
-      outElement instanceof HTMLPreElement,
+      out1Element instanceof HTMLDivElement &&
+      out2Element instanceof HTMLDivElement,
   );
 
   verifyElement.addEventListener("click", () => {
@@ -187,24 +197,34 @@ function main() {
     assert(in1 !== undefined && in2 !== undefined && in3 !== undefined);
 
     const result = verify(in1, in2, in3, courseId as CourseId);
-    outElement.innerHTML = `この授業を取らなくていいのに取っている学生:
-${result.superfluousStudents
-  .map((s) => `${s.id} ${displayMaybeStudentContact(s.contact)}`)
-  .join("\n")}
+    const lb = "%0D%0A";
 
-この授業を取らないといけないのに取っていない学生:
-${result.missingStudents
-  .map((s) => {
-    let reason: string;
-    if (s.wrongCourseId === undefined) {
-      reason = "履修登録なし";
-    } else {
-      reason = `${s.wrongCourseId}を誤登録`;
+    const title1 = document.createElement("div");
+    title1.textContent = "この授業を取らなくていいのに取っている学生:";
+    out1Element.appendChild(title1);
+    for (const s of result.superfluousStudents) {
+      const a = document.createElement("a");
+      a.href = `mailto:${s.contact?.schoolEmail}`
+      + `?cc=${s.contact?.personalEmail}`
+      + "?subject=取らなくていい授業をとってるぞアホ"
+      + `?body=おい${lb}笑える${lb}${courseId}を誤登録`;
+      a.textContent = `${s.id} ${displayMaybeStudentContact(s.contact)}`;
+      out1Element.appendChild(a);
     }
-    return `${s.id} 理由: ${reason} ${displayMaybeStudentContact(s.contact)}`;
-  })
-  .join("\n")}
-`;
+
+    const title2 = document.createElement("div");
+    title2.textContent = "この授業を取らないといけないのに取っていない学生:";
+    out2Element.appendChild(title2);
+    for (const s of result.missingStudents) {
+      const a = document.createElement("a");
+      const reason = displayMissingReason(s.wrongCourseId);
+      a.href = `mailto:${s.contact?.schoolEmail}`
+      + `?cc=${s.contact?.personalEmail}`
+      + "?subject=取ってない授業あるぞボケ"
+      + `?body=${reason}${lb}正しくは${courseId}`;
+      a.textContent = `${s.id} 理由: ${reason} ${displayMaybeStudentContact(s.contact)}`;
+      out2Element.appendChild(a);
+    }
   });
 }
 
