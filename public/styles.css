@@ -7,3 +7,11 @@ body::after {
   display: block;
   height: 50vh;
 }
+
+#output {
+  display: none;
+}
+
+#output.show {
+  display: initial;
+}
