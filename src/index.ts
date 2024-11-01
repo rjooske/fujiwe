@@ -114,7 +114,7 @@ function verify(
   in1: In1,
   in2: In2,
   in3: In3,
-  courseId: CourseId,
+  courseId: CourseId
 ): VerifyResult {
   const missingStudents: MissingStudent[] = [];
   const superfluousStudents: SuperfluousStudent[] = [];
@@ -176,66 +176,67 @@ function createMailtoUri(p: MailtoUriParams): string {
     encodeURIComponent(p.body)
   );
 }
+function replaceUnregisteredContent(content: string): string{
+  content = content.replaceAll("$1", "未登録");
+  return content;
+}
+function replaceWrongRegisteredContent(content: string, id: CourseId): string{
+  content = content.replaceAll("$1", id);
+  return content;
+}
 
 function displaySuperfluousStudent(
-  s: SuperfluousStudent,
-  courseId: CourseId,
+  contact: StudentContact,
+  id: StudentId,
+  subject: string,
+  content: string
 ): HTMLLIElement {
   const li = document.createElement("li");
-
-  li.textContent = `${s.id} `;
-  if (s.contact === undefined) {
-    li.textContent += "(メアド不明)";
-  } else {
-    li.textContent += `学校: ${s.contact.schoolEmail} 個人: ${s.contact.personalEmail} `;
-    const a = document.createElement("a");
-    a.href = createMailtoUri({
-      recipients: [s.contact.schoolEmail],
-      cc: [s.contact.personalEmail],
-      bcc: [],
-      subject: "取らなくていい授業を取っている",
-      body: `${courseId}を誤登録`,
-    });
-    a.textContent = "(メールを作成)";
-    li.appendChild(a);
-  }
-
+  li.textContent = `${id} `;
+  li.textContent += `学校: ${contact.schoolEmail} 個人: ${contact.personalEmail} `;
+  const a = document.createElement("a");
+  a.href = createMailtoUri({
+    recipients: [contact.schoolEmail],
+    cc: [contact.personalEmail],
+    bcc: [],
+    subject: subject,
+    body: content,
+  });
+  a.textContent = "(メールを作成)";
+  li.appendChild(a);
   return li;
 }
 
 function displayMissingStudent(
-  s: MissingStudent,
-  courseId: CourseId,
+  text: string,
+  contact: StudentContact,
+  id: StudentId,
+  subject: string,
+  content: string
 ): HTMLLIElement {
   const li = document.createElement("li");
 
-  li.textContent = `${s.id} `;
-  if (s.wrongCourseId === undefined) {
-    li.textContent += "履修未登録 ";
-  } else {
-    li.textContent += `${s.wrongCourseId}を誤登録 `;
-  }
-
-  if (s.contact === undefined) {
-    li.textContent += "(メアド不明)";
-  } else {
-    li.textContent += `学校: ${s.contact.schoolEmail} 個人: ${s.contact.personalEmail} `;
-    const a = document.createElement("a");
-    a.href = createMailtoUri({
-      recipients: [s.contact.schoolEmail],
-      cc: [s.contact.personalEmail],
-      bcc: [],
-      subject: "取らないといけない授業を取っていない",
-      body:
-        s.wrongCourseId === undefined
-          ? "履修登録をしていない"
-          : `${s.wrongCourseId}を誤登録\n${courseId}を取るべき`,
-    });
-    a.textContent = "(メールを作成)";
-    li.appendChild(a);
-  }
+  li.textContent = `${id} ${text} 学校: ${contact.schoolEmail} 個人: ${contact.personalEmail} `;
+  const a = document.createElement("a");
+  a.href = createMailtoUri({
+    recipients: [contact.schoolEmail],
+    cc: [contact.personalEmail],
+    bcc: [],
+    subject: subject,
+    body: content,
+  });
+  a.textContent = "(メールを作成)";
+  li.appendChild(a);
 
   return li;
+}
+
+function replaceSuperfluousContent(
+  content: string,
+  courceId: CourseId
+): string {
+  content = content.replaceAll("$1", courceId);
+  return content;
 }
 
 function main() {
@@ -247,6 +248,8 @@ function main() {
   const outputElement = mustGetElementById("output");
   const out1Element = mustGetElementById("out1");
   const out2Element = mustGetElementById("out2");
+  const content = mustGetElementById("content");
+  const subject = mustGetElementById("subject");
 
   assert(
     in1Element instanceof HTMLTextAreaElement &&
@@ -256,7 +259,9 @@ function main() {
       verifyElement instanceof HTMLButtonElement &&
       outputElement instanceof HTMLDivElement &&
       out1Element instanceof HTMLUListElement &&
-      out2Element instanceof HTMLUListElement,
+      out2Element instanceof HTMLUListElement &&
+      content instanceof HTMLTextAreaElement &&
+      subject instanceof HTMLInputElement
   );
 
   in1Element.value = `202901213,6501102
@@ -484,16 +489,41 @@ function main() {
     const in3 = parseIn3(in3Element.value);
     const courseId = courseIdElement.value as CourseId;
     assert(in1 !== undefined && in2 !== undefined && in3 !== undefined);
-
+    out1Element.replaceChildren();
     const result = verify(in1, in2, in3, courseId);
     for (const s of result.superfluousStudents) {
-      out1Element.appendChild(displaySuperfluousStudent(s, courseId));
+      if (s.contact === undefined) {
+        //魑魅魍魎 the kyon
+      } else {
+        out1Element.appendChild(
+          displaySuperfluousStudent(
+            s.contact,
+            s.id,
+            subject.value,
+            replaceSuperfluousContent(content.value, courseId)
+          )
+        );
+      }
     }
     for (const s of result.missingStudents) {
-      out2Element.appendChild(displayMissingStudent(s, courseId));
+      if (s.contact === undefined) {
+        //魑魅魍魎 the kyon
+      } else {
+        let text;
+        let content1 = content.value;
+        if (s.wrongCourseId === undefined) {
+          text = "履修未登録 ";
+          content1 = replaceUnregisteredContent(content1);
+        } else {
+          text = `${s.wrongCourseId}を誤登録 `;
+          content1 = replaceWrongRegisteredContent(content1, s.wrongCourseId);
+        }
+        out2Element.appendChild(
+          displayMissingStudent(text, s.contact, s.id, subject.value, content1)
+        );
+      }
+      outputElement.classList.add("show");
     }
-
-    outputElement.classList.add("show");
   });
 }
 
