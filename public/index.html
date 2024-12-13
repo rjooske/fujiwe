@@ -10,30 +10,76 @@
     <h1>フジヱ</h1>
     <img src="images/fujiwe.png" alt="フジヱ" /><br />
 
-    <label for="in1"
-      >履修情報 <a href="input_details.html#in1">(詳細)</a>:</label
-    >
-    <textarea name="in1" id="in1"></textarea>
-    <label for="in2"
-      >授業名簿 <a href="input_details.html#in2">(詳細)</a>:</label
-    >
-    <textarea name="in2" id="in2"></textarea>
-    <label for="in3"
-      >連絡先一覧 <a href="input_details.html#in3">(詳細)</a>:</label
-    >
-    <textarea name="in3" id="in3"></textarea>
-    <label for="course-id"
-      >授業番号 <a href="input_details.html#course-id">(詳細)</a>:</label
-    >
-    <input type="text" id="course-id" /><br />
+    <label for="input-registered-courses">履修情報:</label>
+    <input type="file" id="input-registered-courses" /><br />
+
+    <label for="input-students">学籍情報:</label>
+    <input type="file" id="input-students" /><br />
+
+    <label for="input-courses">班別名簿:</label>
+    <input type="file" id="input-courses" /><br />
+
     <button id="verify">確認</button><br />
 
-    <div id="output">
-      <h2>この授業を取らなくていいのに取っている学生:</h2>
-      <ul id="out1"></ul>
-      <h2>この授業を取らないといけないのに取っていない学生:</h2>
-      <ul id="out2"></ul>
-    </div>
+    <label for="email-template-wrong-course">
+      誤った授業を履修している学生へのメール:
+    </label>
+    <textarea id="email-template-wrong-course"></textarea><br />
+
+    <label for="email-template-no-course">
+      履修登録をしていない学生へのメール:
+    </label>
+    <textarea id="email-template-no-course"></textarea><br />
+
+    <section id="students-in-wrong-course" style="display: none">
+      <h2>履修する授業を間違えている学生</h2>
+      <table>
+        <template>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td><button>メールを作成</button></td>
+          </tr>
+        </template>
+
+        <thead>
+          <tr>
+            <th>学籍番号</th>
+            <th>氏名</th>
+            <th>履修すべき授業</th>
+            <th>履修している授業</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="students-in-no-course" style="display: none">
+      <h2>履修登録をしていない学生</h2>
+      <table>
+        <template>
+          <tr>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td><button>メールを作成</button></td>
+          </tr>
+        </template>
+
+        <thead>
+          <tr>
+            <th>学籍番号</th>
+            <th>氏名</th>
+            <th>履修すべき授業</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
 
     <script src="index.js"></script>
   </body>

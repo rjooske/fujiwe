@@ -1,4 +1,14 @@
-import { parse } from "csv-parse/browser/esm/sync";
+import * as csvParse from "csv-parse/browser/esm/sync";
+import {
+  Course,
+  CourseId,
+  Email,
+  findRegistrationDiscrepancies,
+  Student,
+  StudentId,
+  StudentInWrongCourse,
+} from "./fujiwe";
+import { Cell, Workbook, Worksheet } from "exceljs";
 
 function assert(b: boolean): asserts b {
   if (!b) {
@@ -6,152 +16,198 @@ function assert(b: boolean): asserts b {
   }
 }
 
+function exactlyOne<T>(ts: Iterable<T>): T | undefined {
+  let result: T | undefined;
+  for (const t of ts) {
+    if (result === undefined) {
+      result = t;
+    } else {
+      return undefined;
+    }
+  }
+  return result;
+}
+
+type Csv = {
+  columns: string[];
+  records: Record<string, string>[];
+};
+
+function parseCsv(s: string): Csv | undefined {
+  let records: Record<string, string>[];
+  try {
+    // The library should guarantee that it returns a value of this type
+    records = csvParse.parse(s, { trim: true, columns: true });
+  } catch {
+    return undefined;
+  }
+
+  const firstRecord = records.at(0);
+  if (firstRecord === undefined) {
+    return { columns: [], records: [] };
+  } else {
+    return {
+      columns: Object.keys(firstRecord),
+      records,
+    };
+  }
+}
+
+type ParseRegisteredCoursesResult =
+  | { kind: "ok"; registeredCourseId: Map<StudentId, CourseId> }
+  | { kind: "missing-column"; column: string };
+
+function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
+  const studentIdColumn = "学籍番号";
+  const courseIdColumn = "科目番号";
+  const deletedColumn = "論理削除";
+
+  for (const column of [studentIdColumn, courseIdColumn, deletedColumn]) {
+    if (!csv.columns.includes(column)) {
+      return { kind: "missing-column", column };
+    }
+  }
+
+  const registeredCourseId = new Map<StudentId, CourseId>();
+  for (const record of csv.records) {
+    // TODO: deletion
+    // TODO: remove type assertions
+    registeredCourseId.set(
+      record[studentIdColumn] as StudentId,
+      record[courseIdColumn] as CourseId,
+    );
+  }
+
+  return { kind: "ok", registeredCourseId };
+}
+
+type ParseStudentsResult =
+  | { kind: "ok"; students: Map<StudentId, Student> }
+  | { kind: "missing-column"; column: string };
+
+function parseStudents(csv: Csv): ParseStudentsResult {
+  const idColumn = "学籍番号";
+  const nameColumn = "学生氏名";
+  const schoolEmailColumn = "Ｅ－ＭＡＩＬ＿大学";
+  const personalEmailColumn = "Ｅ－ＭＡＩＬ";
+
+  for (const column of [
+    idColumn,
+    nameColumn,
+    schoolEmailColumn,
+    personalEmailColumn,
+  ]) {
+    if (!csv.columns.includes(column)) {
+      return { kind: "missing-column", column };
+    }
+  }
+
+  const students = new Map<StudentId, Student>();
+  for (const record of csv.records) {
+    // TODO: remove type assertions
+    const id = record[idColumn] as StudentId;
+    students.set(id, {
+      id,
+      name: record[nameColumn],
+      schoolEmail: record[schoolEmailColumn] as Email,
+      personalEmail: record[personalEmailColumn] as Email,
+    });
+  }
+
+  return {
+    kind: "ok",
+    students,
+  };
+}
+
+function allCells(sheet: Worksheet): Cell[] {
+  const cells: Cell[] = [];
+  sheet.eachRow((row) => {
+    row.eachCell((cell) => {
+      cells.push(cell);
+    });
+  });
+  return cells;
+}
+
+type ParseCoursesResult =
+  | {
+      kind: "ok";
+      courses: Map<CourseId, Course>;
+    }
+  | {
+      kind: "missing-cell";
+      cell: "course-id-label" | "course-id" | "student-id-label";
+      sheetName: string;
+    };
+
+function parseCourses(workbook: Workbook): ParseCoursesResult {
+  const courses = new Map<CourseId, Course>();
+
+  for (const sheet of workbook.worksheets) {
+    const cells = allCells(sheet);
+
+    // TODO: better label
+    // if (!cells.some((c) => c.text.trim() === "fujiwe")) {
+    //   continue;
+    // }
+
+    const courseIdLabelCell = cells.find((c) => c.text.trim() === "科目番号：");
+    if (courseIdLabelCell === undefined) {
+      return {
+        kind: "missing-cell",
+        cell: "course-id-label",
+        sheetName: sheet.name,
+      };
+    }
+
+    const courseIdCell = sheet.findCell(
+      courseIdLabelCell.fullAddress.row,
+      courseIdLabelCell.fullAddress.col + 1,
+    );
+    if (courseIdCell === undefined) {
+      return {
+        kind: "missing-cell",
+        cell: "course-id",
+        sheetName: sheet.name,
+      };
+    }
+
+    const studentIdLabel = cells.find((c) => c.text.trim() === "学籍番号");
+    if (studentIdLabel === undefined) {
+      return {
+        kind: "missing-cell",
+        cell: "student-id-label",
+        sheetName: sheet.name,
+      };
+    }
+
+    const expectedStudents: StudentId[] = [];
+    sheet.getColumn(studentIdLabel.fullAddress.col).eachCell((cell, row) => {
+      const text = cell.text.trim();
+      // TODO: detect student id better?
+      if (row > studentIdLabel.fullAddress.row && text !== "") {
+        // TODO: remove type assertion
+        expectedStudents.push(text as StudentId);
+      }
+    });
+
+    // TODO: remove type assertion
+    const courseId = courseIdCell.text.trim() as CourseId;
+    courses.set(courseId, {
+      id: courseId,
+      expectedStudents,
+      targetName: sheet.name,
+    });
+  }
+
+  return { kind: "ok", courses };
+}
+
 function mustGetElementById(id: string): HTMLElement {
   const e = document.getElementById(id);
   assert(e !== null);
   return e;
-}
-
-declare const nominalIdentifier: unique symbol;
-type Nominal<T, Identifier> = T & { [nominalIdentifier]: Identifier };
-
-type StudentId = Nominal<string, "StudentId">;
-type CourseId = Nominal<string, "CourseId">;
-type Email = Nominal<string, "Email">;
-
-type StudentContact = { schoolEmail: Email; personalEmail: Email };
-
-type In1 = Map<StudentId, CourseId>;
-type In2 = Map<StudentId, true>;
-type In3 = Map<StudentId, StudentContact>;
-
-function parseIn1(s: string): In1 | undefined {
-  const rows = parse(s);
-  if (!Array.isArray(rows)) {
-    return undefined;
-  }
-  for (const row of rows) {
-    if (
-      !(
-        Array.isArray(row) &&
-        row.length === 2 &&
-        typeof row[0] === "string" &&
-        typeof row[1] === "string"
-      )
-    ) {
-      return undefined;
-    }
-  }
-
-  const in1: In1 = new Map();
-  for (const [studentId, courseId] of rows) {
-    in1.set(studentId, courseId);
-  }
-  return in1;
-}
-
-function parseIn2(s: string): In2 | undefined {
-  const rows = parse(s);
-  if (!Array.isArray(rows)) {
-    return undefined;
-  }
-  for (const row of rows) {
-    if (
-      !(Array.isArray(row) && row.length === 1 && typeof row[0] === "string")
-    ) {
-      return undefined;
-    }
-  }
-
-  const in2: In2 = new Map();
-  for (const [studentId] of rows) {
-    in2.set(studentId, true);
-  }
-  return in2;
-}
-
-function parseIn3(s: string): In3 | undefined {
-  const rows = parse(s);
-  if (!Array.isArray(rows)) {
-    return undefined;
-  }
-  for (const row of rows) {
-    if (
-      !(
-        Array.isArray(row) &&
-        row.length === 3 &&
-        typeof row[0] === "string" &&
-        typeof row[1] === "string" &&
-        typeof row[2] === "string"
-      )
-    ) {
-      return undefined;
-    }
-  }
-
-  const in3: In3 = new Map();
-  for (const [studentId, schoolEmail, personalEmail] of rows) {
-    in3.set(studentId, { schoolEmail, personalEmail });
-  }
-  return in3;
-}
-
-type MissingStudent = {
-  id: StudentId;
-  contact: StudentContact | undefined;
-  wrongCourseId: CourseId | undefined;
-};
-type SuperfluousStudent = {
-  id: StudentId;
-  contact: StudentContact | undefined;
-};
-type VerifyResult = {
-  missingStudents: MissingStudent[];
-  superfluousStudents: SuperfluousStudent[];
-};
-
-function verify(
-  in1: In1,
-  in2: In2,
-  in3: In3,
-  courseId: CourseId,
-): VerifyResult {
-  const missingStudents: MissingStudent[] = [];
-  const superfluousStudents: SuperfluousStudent[] = [];
-
-  for (const studentId of in2.keys()) {
-    const actualTakenCourseId = in1.get(studentId);
-    if (actualTakenCourseId === undefined) {
-      // Student hasn't registered any course
-      missingStudents.push({
-        id: studentId,
-        contact: in3.get(studentId),
-        wrongCourseId: undefined,
-      });
-    } else if (actualTakenCourseId !== courseId) {
-      // Student has registered the wrong course
-      missingStudents.push({
-        id: studentId,
-        contact: in3.get(studentId),
-        wrongCourseId: actualTakenCourseId,
-      });
-    }
-  }
-
-  for (const [studentId, actualTakenCourseId] of in1.entries()) {
-    // Student took the `courseId` course even though they don't have to
-    if (actualTakenCourseId === courseId && !in2.has(studentId)) {
-      superfluousStudents.push({
-        id: studentId,
-        contact: in3.get(studentId),
-      });
-    }
-  }
-
-  return {
-    missingStudents,
-    superfluousStudents,
-  };
 }
 
 type MailtoUriParams = {
@@ -177,323 +233,373 @@ function createMailtoUri(p: MailtoUriParams): string {
   );
 }
 
-function displaySuperfluousStudent(
-  s: SuperfluousStudent,
-  courseId: CourseId,
-): HTMLLIElement {
-  const li = document.createElement("li");
+// function displayMissingStudent(
+//   s: MissingStudent,
+//   courseId: CourseId,
+// ): HTMLLIElement {
+//   const li = document.createElement("li");
+//
+//   li.textContent = `${s.id} `;
+//   if (s.wrongCourseId === undefined) {
+//     li.textContent += "履修未登録 ";
+//   } else {
+//     li.textContent += `${s.wrongCourseId}を誤登録 `;
+//   }
+//
+//   if (s.contact === undefined) {
+//     li.textContent += "(メアド不明)";
+//   } else {
+//     li.textContent += `学校: ${s.contact.schoolEmail} 個人: ${s.contact.personalEmail} `;
+//     const a = document.createElement("a");
+//     a.href = createMailtoUri({
+//       recipients: [s.contact.schoolEmail],
+//       cc: [s.contact.personalEmail],
+//       bcc: [],
+//       subject: "取らないといけない授業を取っていない",
+//       body:
+//         s.wrongCourseId === undefined
+//           ? "履修登録をしていない"
+//           : `${s.wrongCourseId}を誤登録\n${courseId}を取るべき`,
+//     });
+//     a.textContent = "(メールを作成)";
+//     li.appendChild(a);
+//   }
+//
+//   return li;
+// }
 
-  li.textContent = `${s.id} `;
-  if (s.contact === undefined) {
-    li.textContent += "(メアド不明)";
-  } else {
-    li.textContent += `学校: ${s.contact.schoolEmail} 個人: ${s.contact.personalEmail} `;
-    const a = document.createElement("a");
-    a.href = createMailtoUri({
-      recipients: [s.contact.schoolEmail],
-      cc: [s.contact.personalEmail],
-      bcc: [],
-      subject: "取らなくていい授業を取っている",
-      body: `${courseId}を誤登録`,
-    });
-    a.textContent = "(メールを作成)";
-    li.appendChild(a);
-  }
-
-  return li;
+/**
+ * HTMLTemplateElement.content is guaranteed to be DocumentFragment.
+ * https://html.spec.whatwg.org/multipage/scripting.html#dom-template-content-dev
+ */
+function cloneTemplate(t: HTMLTemplateElement): DocumentFragment {
+  return t.content.cloneNode(true) as DocumentFragment;
 }
 
-function displayMissingStudent(
-  s: MissingStudent,
-  courseId: CourseId,
-): HTMLLIElement {
-  const li = document.createElement("li");
+class StudentsInWrongCourseElement {
+  private constructor(
+    private root: HTMLElement,
+    private onEmailButtonClicked: (
+      s: StudentInWrongCourse,
+      expectedCourse: Course,
+    ) => void,
+    private tbody: HTMLTableSectionElement,
+    private rowTemplate: HTMLTemplateElement,
+  ) {}
 
-  li.textContent = `${s.id} `;
-  if (s.wrongCourseId === undefined) {
-    li.textContent += "履修未登録 ";
-  } else {
-    li.textContent += `${s.wrongCourseId}を誤登録 `;
+  hide() {
+    this.root.style.display = "none";
   }
 
-  if (s.contact === undefined) {
-    li.textContent += "(メアド不明)";
-  } else {
-    li.textContent += `学校: ${s.contact.schoolEmail} 個人: ${s.contact.personalEmail} `;
-    const a = document.createElement("a");
-    a.href = createMailtoUri({
-      recipients: [s.contact.schoolEmail],
-      cc: [s.contact.personalEmail],
-      bcc: [],
-      subject: "取らないといけない授業を取っていない",
-      body:
-        s.wrongCourseId === undefined
-          ? "履修登録をしていない"
-          : `${s.wrongCourseId}を誤登録\n${courseId}を取るべき`,
+  show() {
+    this.root.style.display = "initial";
+  }
+
+  addStudent(student: StudentInWrongCourse, expectedCourse: Course) {
+    const row = StudentsInWrongCourseElement.newRow(this.rowTemplate);
+    assert(row !== undefined);
+    row.studentIdTd.textContent = student.id;
+    row.studentNameTd.textContent = student.name;
+    row.expectedCourseTd.textContent = expectedCourse.id;
+    row.registeredCourseTd.textContent = student.registeredCourse.id;
+    row.emailButton.addEventListener("click", () => {
+      this.onEmailButtonClicked(student, expectedCourse);
     });
-    a.textContent = "(メールを作成)";
-    li.appendChild(a);
+    this.tbody.appendChild(row.tr);
   }
 
-  return li;
+  private static newRow(t: HTMLTemplateElement):
+    | {
+        tr: HTMLTableRowElement;
+        studentIdTd: HTMLTableCellElement;
+        studentNameTd: HTMLTableCellElement;
+        expectedCourseTd: HTMLTableCellElement;
+        registeredCourseTd: HTMLTableCellElement;
+        emailButton: HTMLButtonElement;
+      }
+    | undefined {
+    const template = cloneTemplate(t);
+    // TODO: make sure there's only one tr
+    const tr = template.querySelector("tr");
+    if (tr === null) {
+      return undefined;
+    }
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (tds.length !== 5) {
+      return undefined;
+    }
+    // TODO: make sure there's only one button
+    const emailButton = template.querySelector("button");
+    if (emailButton === null) {
+      return undefined;
+    }
+    return {
+      tr,
+      studentIdTd: tds[0],
+      studentNameTd: tds[1],
+      expectedCourseTd: tds[2],
+      registeredCourseTd: tds[3],
+      emailButton,
+    };
+  }
+
+  static from(
+    root: HTMLElement,
+    onEmailButtonClicked: (
+      s: StudentInWrongCourse,
+      expectedCourse: Course,
+    ) => void,
+  ): StudentsInWrongCourseElement | undefined {
+    // TODO: make sure there's only one tbody
+    const tbody = root.querySelector("tbody");
+    // TODO: better checks
+    const rowTemplate = root.querySelector("template");
+    if (tbody === null || rowTemplate === null) {
+      return undefined;
+    }
+    if (StudentsInWrongCourseElement.newRow(rowTemplate) === undefined) {
+      return undefined;
+    }
+    return new StudentsInWrongCourseElement(
+      root,
+      onEmailButtonClicked,
+      tbody,
+      rowTemplate,
+    );
+  }
 }
 
-function main() {
-  const in1Element = mustGetElementById("in1");
-  const in2Element = mustGetElementById("in2");
-  const in3Element = mustGetElementById("in3");
-  const courseIdElement = mustGetElementById("course-id");
+class StudentsInNoCourseElement {
+  private constructor(
+    private root: HTMLElement,
+    private onEmailButtonClicked: (s: Student, expectedCourse: Course) => void,
+    private tbody: HTMLTableSectionElement,
+    private rowTemplate: HTMLTemplateElement,
+  ) {}
+
+  hide() {
+    this.root.style.display = "none";
+  }
+
+  show() {
+    this.root.style.display = "initial";
+  }
+
+  addStudent(student: Student, expectedCourse: Course) {
+    const row = StudentsInNoCourseElement.newRow(this.rowTemplate);
+    assert(row !== undefined);
+    row.studentIdTd.textContent = student.id;
+    row.studentNameTd.textContent = student.name;
+    row.expectedCourseTd.textContent = expectedCourse.id;
+    row.emailButton.addEventListener("click", () => {
+      this.onEmailButtonClicked(student, expectedCourse);
+    });
+    this.tbody.appendChild(row.tr);
+  }
+
+  private static newRow(t: HTMLTemplateElement):
+    | {
+        tr: HTMLTableRowElement;
+        studentIdTd: HTMLTableCellElement;
+        studentNameTd: HTMLTableCellElement;
+        expectedCourseTd: HTMLTableCellElement;
+        emailButton: HTMLButtonElement;
+      }
+    | undefined {
+    const template = cloneTemplate(t);
+    // TODO: make sure there's only one tr
+    const tr = template.querySelector("tr");
+    if (tr === null) {
+      return undefined;
+    }
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (tds.length !== 4) {
+      return undefined;
+    }
+    // TODO: make sure there's only one button
+    const emailButton = template.querySelector("button");
+    if (emailButton === null) {
+      return undefined;
+    }
+    return {
+      tr,
+      studentIdTd: tds[0],
+      studentNameTd: tds[1],
+      expectedCourseTd: tds[2],
+      emailButton,
+    };
+  }
+
+  static from(
+    root: HTMLElement,
+    onEmailButtonClicked: (s: Student, expectedCourse: Course) => void,
+  ): StudentsInNoCourseElement | undefined {
+    // TODO: make sure there's only one tbody
+    const tbody = root.querySelector("tbody");
+    // TODO: better checks
+    const rowTemplate = root.querySelector("template");
+    if (tbody === null || rowTemplate === null) {
+      return undefined;
+    }
+    if (StudentsInNoCourseElement.newRow(rowTemplate) === undefined) {
+      return undefined;
+    }
+    return new StudentsInNoCourseElement(
+      root,
+      onEmailButtonClicked,
+      tbody,
+      rowTemplate,
+    );
+  }
+}
+
+function fillInWrongCourseTemplate(
+  template: string,
+  student: StudentInWrongCourse,
+  expectedCourse: Course,
+): string {
+  const variables: [string, string][] = [
+    ["$student_id", student.id],
+    ["$student_name", student.name],
+    ["$expected_course_id", expectedCourse.id],
+    ["$expected_course_target", expectedCourse.targetName],
+    ["$registered_course_id", student.registeredCourse.id],
+    ["$registered_course_target", student.registeredCourse.targetName],
+  ];
+  for (const [pattern, replacement] of variables) {
+    template = template.replaceAll(pattern, replacement);
+  }
+  return template;
+}
+
+function fillInNoCourseTemplate(
+  template: string,
+  student: Student,
+  expectedCourse: Course,
+): string {
+  const variables: [string, string][] = [
+    ["$student_id", student.id],
+    ["$student_name", student.name],
+    ["$expected_course_id", expectedCourse.id],
+    ["$expected_course_target", expectedCourse.targetName],
+  ];
+  for (const [pattern, replacement] of variables) {
+    template = template.replaceAll(pattern, replacement);
+  }
+  return template;
+}
+
+async function main() {
+  const registeredCoursesInput = mustGetElementById("input-registered-courses");
+  const studentsInput = mustGetElementById("input-students");
+  const coursesInput = mustGetElementById("input-courses");
   const verifyElement = mustGetElementById("verify");
-  const outputElement = mustGetElementById("output");
-  const out1Element = mustGetElementById("out1");
-  const out2Element = mustGetElementById("out2");
+  const wrongCourseTextarea = mustGetElementById("email-template-wrong-course");
+  const noCourseTextarea = mustGetElementById("email-template-no-course");
 
-  assert(
-    in1Element instanceof HTMLTextAreaElement &&
-      in2Element instanceof HTMLTextAreaElement &&
-      in3Element instanceof HTMLTextAreaElement &&
-      courseIdElement instanceof HTMLInputElement &&
-      verifyElement instanceof HTMLButtonElement &&
-      outputElement instanceof HTMLDivElement &&
-      out1Element instanceof HTMLUListElement &&
-      out2Element instanceof HTMLUListElement,
+  assert(registeredCoursesInput instanceof HTMLInputElement);
+  assert(studentsInput instanceof HTMLInputElement);
+  assert(coursesInput instanceof HTMLInputElement);
+  assert(verifyElement instanceof HTMLButtonElement);
+  assert(wrongCourseTextarea instanceof HTMLTextAreaElement);
+  assert(noCourseTextarea instanceof HTMLTextAreaElement);
+
+  const updateVerifyElement = () => {
+    verifyElement.disabled = ![
+      registeredCoursesInput,
+      studentsInput,
+      coursesInput,
+    ].every((i) => i.files?.length === 1);
+  };
+  registeredCoursesInput.addEventListener("change", updateVerifyElement);
+  studentsInput.addEventListener("change", updateVerifyElement);
+  coursesInput.addEventListener("change", updateVerifyElement);
+  updateVerifyElement();
+
+  const studentsInWrongCourseElement = StudentsInWrongCourseElement.from(
+    mustGetElementById("students-in-wrong-course"),
+    (student, expectedCourse) => {
+      const x = fillInWrongCourseTemplate(
+        wrongCourseTextarea.value,
+        student,
+        expectedCourse,
+      );
+      console.log(x);
+    },
   );
+  const studentsInNoCourseElement = StudentsInNoCourseElement.from(
+    mustGetElementById("students-in-no-course"),
+    (student, expectedCourse) => {
+      const x = fillInNoCourseTemplate(
+        wrongCourseTextarea.value,
+        student,
+        expectedCourse,
+      );
+      console.log(x);
+    },
+  );
+  assert(studentsInWrongCourseElement !== undefined);
+  assert(studentsInNoCourseElement !== undefined);
 
-  in1Element.value = `202901213,6501102
-202901439,6501102
-202901567,6504202
-202902148,6501102
-202902267,6501102
-202902564,6501102
-202902759,6504102
-202902784,6501102
-202902856,6502202
-202903012,6501102
-202903028,6501102
-202903149,6501102
-202903181,6501102
-202903247,6501102
-202903408,6501102
-202903432,6501102
-202903580,6501202
-202903681,6501102
-202903762,6501202
-202903775,6501102
-202903789,6501102
-202903823,6502102
-202903948,6501102
-202904033,6501202
-202904058,6501102
-202904087,6501202
-202904239,6501202
-202904293,6501202
-202904324,6501102
-202904345,6501202
-202904452,6501202
-202904536,6502102
-202904570,6504102
-202904637,6502102
-202904703,6502102
-202904741,6502102
-202904765,6502202
-202904789,6502102
-202904875,6502102
-202904912,6502102
-202905048,6502102
-202905089,6502102
-202905117,6502102
-202905203,6502102
-202905279,6505102
-202905322,6502102
-202905391,6502102
-202905421,6504102
-202905506,6502102
-202905527,6502102
-202905570,6502102
-202905652,6505102
-202905713,6502102
-202905781,6502202
-202905819,6502202
-202905860,6502202
-202905927,6502202
-202905945,6504202
-202906017,6502202
-202906065,6502202
-202906089,6502202
-202906146,6502202
-202906215,6501202
-202906283,6502202
-202906359,6502202
-202906412,6502202
-202906459,6502202
-202906520,6502202
-202906597,6502202
-202906615,6502202
-202906682,6504102
-202906733,6505102
-202906823,6504102
-202906849,6504102
-202906889,6504102
-202906935,6502102
-202907028,6504102
-202907067,6504102
-202907156,6504102
-202907223,6504102
-202907308,6504102
-202907327,6504102
-202907410,6504202
-202907439,6504202
-202907481,6501202
-202907511,6504202
-202907567,6504202
-202907632,6504202
-202907751,6507102
-202907820,6501101
-202907865,6504202
-202907983,6504202`;
-  in2Element.value = `202901213
-202901439
-202901567
-202902148
-202902267
-202902564
-202902759
-202902784
-202902856
-202903012
-202903028
-202903149
-202903181
-202903247
-202903305
-202903408
-202903432
-202903580
-202903681
-202903738
-202903762
-202903775
-202903789
-202903823
-202903948`;
-  in3Element.value = `202901213,s2901213@u.tsukuba.ac.jp,john.doe@example.com
-202901439,s2901439@u.tsukuba.ac.jp,jane.smith@example.com
-202901567,s2901567@u.tsukuba.ac.jp,alice.johnson@example.com
-202902148,s2902148@u.tsukuba.ac.jp,bob.brown@example.com
-202902267,s2902267@u.tsukuba.ac.jp,charlie.davis@example.com
-202902564,s2902564@u.tsukuba.ac.jp,david.miller@example.com
-202902759,s2902759@u.tsukuba.ac.jp,eve.white@example.com
-202902784,s2902784@u.tsukuba.ac.jp,frank.thompson@example.com
-202902856,s2902856@u.tsukuba.ac.jp,grace.jones@example.com
-202903012,s2903012@u.tsukuba.ac.jp,hank.wilson@example.com
-202903028,s2903028@u.tsukuba.ac.jp,isabella.moore@example.com
-202903149,s2903149@u.tsukuba.ac.jp,jack.taylor@example.com
-202903181,s2903181@u.tsukuba.ac.jp,karen.anderson@example.com
-202903247,s2903247@u.tsukuba.ac.jp,luke.jackson@example.com
-202903305,s2903305@u.tsukuba.ac.jp,mary.harris@example.com
-202903408,s2903408@u.tsukuba.ac.jp,nathan.martin@example.com
-202903432,s2903432@u.tsukuba.ac.jp,olivia.lee@example.com
-202903580,s2903580@u.tsukuba.ac.jp,paul.walker@example.com
-202903681,s2903681@u.tsukuba.ac.jp,quinn.hall@example.com
-202903738,s2903738@u.tsukuba.ac.jp,rachel.allen@example.com
-202903762,s2903762@u.tsukuba.ac.jp,sophia.young@example.com
-202903775,s2903775@u.tsukuba.ac.jp,tony.king@example.com
-202903789,s2903789@u.tsukuba.ac.jp,uma.hill@example.com
-202903823,s2903823@u.tsukuba.ac.jp,victor.scott@example.com
-202903948,s2903948@u.tsukuba.ac.jp,william.green@example.com
-202904033,s2904033@u.tsukuba.ac.jp,xena.adams@example.com
-202904058,s2904058@u.tsukuba.ac.jp,yara.baker@example.com
-202904087,s2904087@u.tsukuba.ac.jp,zoe.bell@example.com
-202904239,s2904239@u.tsukuba.ac.jp,aaron.cooper@example.com
-202904272,s2904272@u.tsukuba.ac.jp,brian.foster@example.com
-202904293,s2904293@u.tsukuba.ac.jp,cathy.rogers@example.com
-202904324,s2904324@u.tsukuba.ac.jp,daniel.perez@example.com
-202904345,s2904345@u.tsukuba.ac.jp,elaine.phillips@example.com
-202904452,s2904452@u.tsukuba.ac.jp,francis.reed@example.com
-202904536,s2904536@u.tsukuba.ac.jp,gina.cox@example.com
-202904570,s2904570@u.tsukuba.ac.jp,harry.mitchell@example.com
-202904637,s2904637@u.tsukuba.ac.jp,iris.ward@example.com
-202904703,s2904703@u.tsukuba.ac.jp,jake.wright@example.com
-202904741,s2904741@u.tsukuba.ac.jp,kelly.stewart@example.com
-202904765,s2904765@u.tsukuba.ac.jp,luna.foster@example.com
-202904789,s2904789@u.tsukuba.ac.jp,mike.wood@example.com
-202904875,s2904875@u.tsukuba.ac.jp,nina.brooks@example.com
-202904912,s2904912@u.tsukuba.ac.jp,otto.james@example.com
-202904933,s2904933@u.tsukuba.ac.jp,penny.carter@example.com
-202905048,s2905048@u.tsukuba.ac.jp,quincy.ross@example.com
-202905089,s2905089@u.tsukuba.ac.jp,riley.patterson@example.com
-202905117,s2905117@u.tsukuba.ac.jp,sandy.james@example.com
-202905203,s2905203@u.tsukuba.ac.jp,tony.morris@example.com
-202905279,s2905279@u.tsukuba.ac.jp,uma.mitchell@example.com
-202905322,s2905322@u.tsukuba.ac.jp,vicky.hughes@example.com
-202905391,s2905391@u.tsukuba.ac.jp,walter.burns@example.com
-202905421,s2905421@u.tsukuba.ac.jp,xander.perry@example.com
-202905506,s2905506@u.tsukuba.ac.jp,yasmine.ramirez@example.com
-202905527,s2905527@u.tsukuba.ac.jp,zoey.dixon@example.com
-202905570,s2905570@u.tsukuba.ac.jp,adam.gonzalez@example.com
-202905652,s2905652@u.tsukuba.ac.jp,brittany.james@example.com
-202905713,s2905713@u.tsukuba.ac.jp,cynthia.flores@example.com
-202905781,s2905781@u.tsukuba.ac.jp,samantha.quincy@example.com
-202905819,s2905819@u.tsukuba.ac.jp,riley.harry@example.com
-202905860,s2905860@u.tsukuba.ac.jp,franklin.piper@example.com
-202905927,s2905927@u.tsukuba.ac.jp,victor.olivia@example.com
-202905945,s2905945@u.tsukuba.ac.jp,francis.carly@example.com
-202906017,s2906017@u.tsukuba.ac.jp,wendy.otto@example.com
-202906065,s2906065@u.tsukuba.ac.jp,quincy.jake@example.com
-202906089,s2906089@u.tsukuba.ac.jp,nora.kelly@example.com
-202906146,s2906146@u.tsukuba.ac.jp,william.elaine@example.com
-202906197,s2906197@u.tsukuba.ac.jp,elena.riley@example.com
-202906215,s2906215@u.tsukuba.ac.jp,victor.hank@example.com
-202906283,s2906283@u.tsukuba.ac.jp,rachel.brian@example.com
-202906359,s2906359@u.tsukuba.ac.jp,gretchen.nathan@example.com
-202906412,s2906412@u.tsukuba.ac.jp,luna.xena@example.com
-202906459,s2906459@u.tsukuba.ac.jp,charlie.walter@example.com
-202906520,s2906520@u.tsukuba.ac.jp,brian.luna@example.com
-202906597,s2906597@u.tsukuba.ac.jp,elizabeth.riley@example.com
-202906615,s2906615@u.tsukuba.ac.jp,nathan.quinn@example.com
-202906682,s2906682@u.tsukuba.ac.jp,elena.derek@example.com
-202906709,s2906709@u.tsukuba.ac.jp,derek.wendy@example.com
-202906733,s2906733@u.tsukuba.ac.jp,penny.grace@example.com
-202906823,s2906823@u.tsukuba.ac.jp,alice.elaine@example.com
-202906849,s2906849@u.tsukuba.ac.jp,otto.jane@example.com
-202906889,s2906889@u.tsukuba.ac.jp,adam.tony@example.com
-202906935,s2906935@u.tsukuba.ac.jp,nora.quinn@example.com
-202907028,s2907028@u.tsukuba.ac.jp,quincy.grace@example.com
-202907067,s2907067@u.tsukuba.ac.jp,riley.yasmine@example.com
-202907101,s2907101@u.tsukuba.ac.jp,david.luke@example.com
-202907156,s2907156@u.tsukuba.ac.jp,tony.matthew@example.com
-202907223,s2907223@u.tsukuba.ac.jp,david.harold@example.com
-202907308,s2907308@u.tsukuba.ac.jp,bobby.walter@example.com
-202907327,s2907327@u.tsukuba.ac.jp,gina.jack@example.com
-202907410,s2907410@u.tsukuba.ac.jp,william.nora@example.com
-202907439,s2907439@u.tsukuba.ac.jp,victor.mary@example.com
-202907481,s2907481@u.tsukuba.ac.jp,walter.jack@example.com
-202907511,s2907511@u.tsukuba.ac.jp,charlie.quincy@example.com
-202907567,s2907567@u.tsukuba.ac.jp,bobby.daniel@example.com
-202907632,s2907632@u.tsukuba.ac.jp,olivia.penny@example.com
-202907683,s2907683@u.tsukuba.ac.jp,carly.kurt@example.com
-202907751,s2907751@u.tsukuba.ac.jp,bob.bobby@example.com
-202907820,s2907820@u.tsukuba.ac.jp,brittany.zoe@example.com
-202907865,s2907865@u.tsukuba.ac.jp,jackie.penny@example.com
-202907983,s2907983@u.tsukuba.ac.jp,zoe.quinn@example.com`;
-  courseIdElement.value = "6501102";
+  verifyElement.addEventListener("click", async () => {
+    assert(registeredCoursesInput.files !== null);
+    assert(studentsInput.files !== null);
+    assert(coursesInput.files !== null);
 
-  verifyElement.addEventListener("click", () => {
-    const in1 = parseIn1(in1Element.value);
-    const in2 = parseIn2(in2Element.value);
-    const in3 = parseIn3(in3Element.value);
-    const courseId = courseIdElement.value as CourseId;
-    assert(in1 !== undefined && in2 !== undefined && in3 !== undefined);
-
-    const result = verify(in1, in2, in3, courseId);
-    for (const s of result.superfluousStudents) {
-      out1Element.appendChild(displaySuperfluousStudent(s, courseId));
-    }
-    for (const s of result.missingStudents) {
-      out2Element.appendChild(displayMissingStudent(s, courseId));
+    const registeredCoursesFile = exactlyOne(registeredCoursesInput.files);
+    const studentsFile = exactlyOne(studentsInput.files);
+    const coursesFile = exactlyOne(coursesInput.files);
+    if (
+      registeredCoursesFile === undefined ||
+      studentsFile === undefined ||
+      coursesFile === undefined
+    ) {
+      return;
     }
 
-    outputElement.classList.add("show");
+    // TODO: show parsing errors
+    const registeredCoursesText = await registeredCoursesFile.text();
+    const registeredCoursesCsv = parseCsv(registeredCoursesText);
+    assert(registeredCoursesCsv !== undefined);
+    const maybeRegisteredCourses = parseRegisteredCourses(registeredCoursesCsv);
+    assert(maybeRegisteredCourses.kind === "ok");
+    const { registeredCourseId: registeredCourses } = maybeRegisteredCourses;
+
+    // TODO: show parsing errors
+    const studentsText = await studentsFile.text();
+    const studentsCsv = parseCsv(studentsText);
+    assert(studentsCsv !== undefined);
+    const maybeStudents = parseStudents(studentsCsv);
+    assert(maybeStudents.kind === "ok");
+    const { students } = maybeStudents;
+
+    // TODO: show parsing errors
+    const coursesArrayBuffer = await coursesFile.arrayBuffer();
+    const coursesWorkbook = new Workbook();
+    await coursesWorkbook.xlsx.load(coursesArrayBuffer);
+    const maybeCourses = parseCourses(coursesWorkbook);
+    assert(maybeCourses.kind === "ok");
+    const { courses } = maybeCourses;
+
+    studentsInWrongCourseElement.hide();
+    studentsInNoCourseElement.hide();
+
+    const discrepancies = findRegistrationDiscrepancies(
+      registeredCourses,
+      students,
+      courses,
+    );
+    for (const discrepancy of discrepancies) {
+      for (const s of discrepancy.studentsInWrongCourse) {
+        studentsInWrongCourseElement.addStudent(s, discrepancy.expectedCourse);
+      }
+      for (const s of discrepancy.studentsInNoCourse) {
+        studentsInNoCourseElement.addStudent(s, discrepancy.expectedCourse);
+      }
+    }
+
+    studentsInWrongCourseElement.show();
+    studentsInNoCourseElement.show();
   });
 }
 

@@ -8,10 +8,9 @@ body::after {
   height: 50vh;
 }
 
-#output {
-  display: none;
-}
-
-#output.show {
-  display: initial;
+table,
+th,
+td {
+  border: 1px solid black;
+  border-collapse: collapse;
 }
