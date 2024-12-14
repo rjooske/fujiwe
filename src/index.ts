@@ -489,6 +489,9 @@ function fillInNoCourseTemplate(
   return template;
 }
 
+const WRONG_COURSE_EMAIL_TEMPLATE_KEY = "wrong-course-email-template";
+const NO_COURSE_EMAIL_TEMPLATE_KEY = "no-course-email-template";
+
 async function main() {
   const registeredCoursesInput = mustGetElementById("input-registered-courses");
   const studentsInput = mustGetElementById("input-students");
@@ -515,6 +518,21 @@ async function main() {
   studentsInput.addEventListener("change", updateVerifyElement);
   coursesInput.addEventListener("change", updateVerifyElement);
   updateVerifyElement();
+
+  wrongCourseTextarea.value =
+    localStorage.getItem(WRONG_COURSE_EMAIL_TEMPLATE_KEY) ?? "";
+  noCourseTextarea.value =
+    localStorage.getItem(NO_COURSE_EMAIL_TEMPLATE_KEY) ?? "";
+  // TODO: throttle?
+  wrongCourseTextarea.addEventListener("input", () => {
+    localStorage.setItem(
+      WRONG_COURSE_EMAIL_TEMPLATE_KEY,
+      wrongCourseTextarea.value,
+    );
+  });
+  noCourseTextarea.addEventListener("input", () => {
+    localStorage.setItem(NO_COURSE_EMAIL_TEMPLATE_KEY, noCourseTextarea.value);
+  });
 
   const studentsInWrongCourseElement = StudentsInWrongCourseElement.from(
     mustGetElementById("students-in-wrong-course"),
