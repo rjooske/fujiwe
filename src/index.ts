@@ -489,7 +489,18 @@ function fillInNoCourseTemplate(
   return template;
 }
 
+function clickUri(uri: string) {
+  const a = document.createElement("a");
+  a.href = uri;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+const WRONG_COURSE_EMAIL_SUBJECT_KEY = "wrong-course-email-subject";
 const WRONG_COURSE_EMAIL_TEMPLATE_KEY = "wrong-course-email-template";
+const NO_COURSE_EMAIL_SUBJECT_KEY = "no-course-email-subject";
 const NO_COURSE_EMAIL_TEMPLATE_KEY = "no-course-email-template";
 
 async function main() {
@@ -497,15 +508,19 @@ async function main() {
   const studentsInput = mustGetElementById("input-students");
   const coursesInput = mustGetElementById("input-courses");
   const verifyElement = mustGetElementById("verify");
-  const wrongCourseTextarea = mustGetElementById("email-template-wrong-course");
-  const noCourseTextarea = mustGetElementById("email-template-no-course");
+  const wrongCourseSubject = mustGetElementById("email-subject-wrong-course");
+  const wrongCourseTemplate = mustGetElementById("email-template-wrong-course");
+  const noCourseSubject = mustGetElementById("email-subject-no-course");
+  const noCourseTemplate = mustGetElementById("email-template-no-course");
 
   assert(registeredCoursesInput instanceof HTMLInputElement);
   assert(studentsInput instanceof HTMLInputElement);
   assert(coursesInput instanceof HTMLInputElement);
   assert(verifyElement instanceof HTMLButtonElement);
-  assert(wrongCourseTextarea instanceof HTMLTextAreaElement);
-  assert(noCourseTextarea instanceof HTMLTextAreaElement);
+  assert(wrongCourseSubject instanceof HTMLInputElement);
+  assert(wrongCourseTemplate instanceof HTMLTextAreaElement);
+  assert(noCourseSubject instanceof HTMLInputElement);
+  assert(noCourseTemplate instanceof HTMLTextAreaElement);
 
   const updateVerifyElement = () => {
     verifyElement.disabled = ![
@@ -519,41 +534,53 @@ async function main() {
   coursesInput.addEventListener("change", updateVerifyElement);
   updateVerifyElement();
 
-  wrongCourseTextarea.value =
-    localStorage.getItem(WRONG_COURSE_EMAIL_TEMPLATE_KEY) ?? "";
-  noCourseTextarea.value =
-    localStorage.getItem(NO_COURSE_EMAIL_TEMPLATE_KEY) ?? "";
-  // TODO: throttle?
-  wrongCourseTextarea.addEventListener("input", () => {
-    localStorage.setItem(
-      WRONG_COURSE_EMAIL_TEMPLATE_KEY,
-      wrongCourseTextarea.value,
-    );
-  });
-  noCourseTextarea.addEventListener("input", () => {
-    localStorage.setItem(NO_COURSE_EMAIL_TEMPLATE_KEY, noCourseTextarea.value);
-  });
+  for (const [element, key] of [
+    [wrongCourseSubject, WRONG_COURSE_EMAIL_SUBJECT_KEY],
+    [wrongCourseTemplate, WRONG_COURSE_EMAIL_TEMPLATE_KEY],
+    [noCourseSubject, NO_COURSE_EMAIL_SUBJECT_KEY],
+    [noCourseTemplate, NO_COURSE_EMAIL_TEMPLATE_KEY],
+  ] as const) {
+    element.value = localStorage.getItem(key) ?? "";
+    // TODO: throttle?
+    element.addEventListener("input", () => {
+      localStorage.setItem(key, element.value);
+    });
+  }
 
   const studentsInWrongCourseElement = StudentsInWrongCourseElement.from(
     mustGetElementById("students-in-wrong-course"),
     (student, expectedCourse) => {
-      const x = fillInWrongCourseTemplate(
-        wrongCourseTextarea.value,
+      const body = fillInWrongCourseTemplate(
+        wrongCourseTemplate.value,
         student,
         expectedCourse,
       );
-      console.log(x);
+      const uri = createMailtoUri({
+        subject: wrongCourseSubject.value,
+        recipients: [student.schoolEmail],
+        cc: [student.personalEmail],
+        bcc: [],
+        body,
+      });
+      clickUri(uri);
     },
   );
   const studentsInNoCourseElement = StudentsInNoCourseElement.from(
     mustGetElementById("students-in-no-course"),
     (student, expectedCourse) => {
-      const x = fillInNoCourseTemplate(
-        wrongCourseTextarea.value,
+      const body = fillInNoCourseTemplate(
+        wrongCourseTemplate.value,
         student,
         expectedCourse,
       );
-      console.log(x);
+      const uri = createMailtoUri({
+        subject: noCourseSubject.value,
+        recipients: [student.schoolEmail],
+        cc: [student.personalEmail],
+        bcc: [],
+        body,
+      });
+      clickUri(uri);
     },
   );
   assert(studentsInWrongCourseElement !== undefined);

@@ -21,15 +21,21 @@
 
     <button id="verify">確認</button><br />
 
-    <label for="email-template-wrong-course">
-      誤った授業を履修している学生へのメール:
-    </label>
-    <textarea id="email-template-wrong-course"></textarea><br />
+    <section>
+      <h3>誤った授業を履修している学生へのメール:</h3>
+      <label for="email-subject-wrong-course">件名:</label>
+      <input type="text" id="email-subject-wrong-course" /><br />
+      <label for="email-template-wrong-course">本文:</label>
+      <textarea id="email-template-wrong-course"></textarea><br />
+    </section>
 
-    <label for="email-template-no-course">
-      履修登録をしていない学生へのメール:
-    </label>
-    <textarea id="email-template-no-course"></textarea><br />
+    <section>
+      <h3>履修登録をしていない学生へのメール:</h3>
+      <label for="email-subject-no-course">件名:</label>
+      <input type="text" id="email-subject-no-course" /><br />
+      <label for="email-template-no-course">本文:</label>
+      <textarea id="email-template-no-course"></textarea><br />
+    </section>
 
     <section id="students-in-wrong-course" style="display: none">
       <h2>履修する授業を間違えている学生</h2>
