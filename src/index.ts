@@ -16,6 +16,10 @@ function assert(b: boolean): asserts b {
   }
 }
 
+function unreachable(_: never): never {
+  throw new Error("should be unreachable");
+}
+
 function exactlyOne<T>(ts: Iterable<T>): T | undefined {
   let result: T | undefined;
   for (const t of ts) {
@@ -53,9 +57,10 @@ function parseCsv(s: string): Csv | undefined {
   }
 }
 
+type ParseRegisteredCoursesError = { kind: "missing-column"; column: string };
 type ParseRegisteredCoursesResult =
   | { kind: "ok"; registeredCourseId: Map<StudentId, CourseId> }
-  | { kind: "missing-column"; column: string };
+  | { kind: "error"; error: ParseRegisteredCoursesError };
 
 function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
   const studentIdColumn = "学籍番号";
@@ -64,7 +69,7 @@ function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
 
   for (const column of [studentIdColumn, courseIdColumn, deletedColumn]) {
     if (!csv.columns.includes(column)) {
-      return { kind: "missing-column", column };
+      return { kind: "error", error: { kind: "missing-column", column } };
     }
   }
 
@@ -81,9 +86,10 @@ function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
   return { kind: "ok", registeredCourseId };
 }
 
+type ParseStudentsError = { kind: "missing-column"; column: string };
 type ParseStudentsResult =
   | { kind: "ok"; students: Map<StudentId, Student> }
-  | { kind: "missing-column"; column: string };
+  | { kind: "error"; error: ParseStudentsError };
 
 function parseStudents(csv: Csv): ParseStudentsResult {
   const idColumn = "学籍番号";
@@ -98,7 +104,7 @@ function parseStudents(csv: Csv): ParseStudentsResult {
     personalEmailColumn,
   ]) {
     if (!csv.columns.includes(column)) {
-      return { kind: "missing-column", column };
+      return { kind: "error", error: { kind: "missing-column", column } };
     }
   }
 
@@ -130,16 +136,14 @@ function allCells(sheet: Worksheet): Cell[] {
   return cells;
 }
 
+type ParseCoursesError = {
+  kind: "missing-cell";
+  cell: "course-id-label" | "course-id" | "student-id-label";
+  sheetName: string;
+};
 type ParseCoursesResult =
-  | {
-      kind: "ok";
-      courses: Map<CourseId, Course>;
-    }
-  | {
-      kind: "missing-cell";
-      cell: "course-id-label" | "course-id" | "student-id-label";
-      sheetName: string;
-    };
+  | { kind: "ok"; courses: Map<CourseId, Course> }
+  | { kind: "error"; error: ParseCoursesError };
 
 function parseCourses(workbook: Workbook): ParseCoursesResult {
   const courses = new Map<CourseId, Course>();
@@ -155,9 +159,12 @@ function parseCourses(workbook: Workbook): ParseCoursesResult {
     const courseIdLabelCell = cells.find((c) => c.text.trim() === "科目番号：");
     if (courseIdLabelCell === undefined) {
       return {
-        kind: "missing-cell",
-        cell: "course-id-label",
-        sheetName: sheet.name,
+        kind: "error",
+        error: {
+          kind: "missing-cell",
+          cell: "course-id-label",
+          sheetName: sheet.name,
+        },
       };
     }
 
@@ -167,18 +174,24 @@ function parseCourses(workbook: Workbook): ParseCoursesResult {
     );
     if (courseIdCell === undefined) {
       return {
-        kind: "missing-cell",
-        cell: "course-id",
-        sheetName: sheet.name,
+        kind: "error",
+        error: {
+          kind: "missing-cell",
+          cell: "course-id",
+          sheetName: sheet.name,
+        },
       };
     }
 
     const studentIdLabel = cells.find((c) => c.text.trim() === "学籍番号");
     if (studentIdLabel === undefined) {
       return {
-        kind: "missing-cell",
-        cell: "student-id-label",
-        sheetName: sheet.name,
+        kind: "error",
+        error: {
+          kind: "missing-cell",
+          cell: "student-id-label",
+          sheetName: sheet.name,
+        },
       };
     }
 
@@ -232,41 +245,6 @@ function createMailtoUri(p: MailtoUriParams): string {
     encodeURIComponent(p.body)
   );
 }
-
-// function displayMissingStudent(
-//   s: MissingStudent,
-//   courseId: CourseId,
-// ): HTMLLIElement {
-//   const li = document.createElement("li");
-//
-//   li.textContent = `${s.id} `;
-//   if (s.wrongCourseId === undefined) {
-//     li.textContent += "履修未登録 ";
-//   } else {
-//     li.textContent += `${s.wrongCourseId}を誤登録 `;
-//   }
-//
-//   if (s.contact === undefined) {
-//     li.textContent += "(メアド不明)";
-//   } else {
-//     li.textContent += `学校: ${s.contact.schoolEmail} 個人: ${s.contact.personalEmail} `;
-//     const a = document.createElement("a");
-//     a.href = createMailtoUri({
-//       recipients: [s.contact.schoolEmail],
-//       cc: [s.contact.personalEmail],
-//       bcc: [],
-//       subject: "取らないといけない授業を取っていない",
-//       body:
-//         s.wrongCourseId === undefined
-//           ? "履修登録をしていない"
-//           : `${s.wrongCourseId}を誤登録\n${courseId}を取るべき`,
-//     });
-//     a.textContent = "(メールを作成)";
-//     li.appendChild(a);
-//   }
-//
-//   return li;
-// }
 
 /**
  * HTMLTemplateElement.content is guaranteed to be DocumentFragment.
@@ -498,12 +476,52 @@ function clickUri(uri: string) {
   a.remove();
 }
 
+function formatParseRegisteredCoursesError(
+  e: ParseRegisteredCoursesError,
+): string {
+  switch (e.kind) {
+    case "missing-column":
+      return `履修情報ファイルに列「${e.column}」が存在しません`;
+    default:
+      unreachable(e.kind);
+  }
+}
+
+function formatParseStudentsError(e: ParseStudentsError): string {
+  switch (e.kind) {
+    case "missing-column":
+      return `学籍情報ファイルに列「${e.column}」が存在しません`;
+    default:
+      unreachable(e.kind);
+  }
+}
+
+function formatParseCoursesError(e: ParseCoursesError): string {
+  switch (e.kind) {
+    case "missing-cell":
+      let s = `班別名簿ファイルのシート「${e.sheetName}」の中に`;
+      switch (e.cell) {
+        case "course-id-label":
+          s += "科目番号ラベル";
+          break;
+        case "course-id":
+          s += "科目番号";
+          break;
+        case "student-id-label":
+          s += "学籍番号ラベル";
+          break;
+      }
+      s += "のセルが存在しません";
+      return s;
+  }
+}
+
 const WRONG_COURSE_EMAIL_SUBJECT_KEY = "wrong-course-email-subject";
 const WRONG_COURSE_EMAIL_TEMPLATE_KEY = "wrong-course-email-template";
 const NO_COURSE_EMAIL_SUBJECT_KEY = "no-course-email-subject";
 const NO_COURSE_EMAIL_TEMPLATE_KEY = "no-course-email-template";
 
-async function main() {
+function main() {
   const registeredCoursesInput = mustGetElementById("input-registered-courses");
   const studentsInput = mustGetElementById("input-students");
   const coursesInput = mustGetElementById("input-courses");
@@ -512,6 +530,7 @@ async function main() {
   const wrongCourseTemplate = mustGetElementById("email-template-wrong-course");
   const noCourseSubject = mustGetElementById("email-subject-no-course");
   const noCourseTemplate = mustGetElementById("email-template-no-course");
+  const errorElement = mustGetElementById("error");
 
   assert(registeredCoursesInput instanceof HTMLInputElement);
   assert(studentsInput instanceof HTMLInputElement);
@@ -521,6 +540,7 @@ async function main() {
   assert(wrongCourseTemplate instanceof HTMLTextAreaElement);
   assert(noCourseSubject instanceof HTMLInputElement);
   assert(noCourseTemplate instanceof HTMLTextAreaElement);
+  assert(errorElement instanceof HTMLParagraphElement);
 
   const updateVerifyElement = () => {
     verifyElement.disabled = ![
@@ -586,6 +606,14 @@ async function main() {
   assert(studentsInWrongCourseElement !== undefined);
   assert(studentsInNoCourseElement !== undefined);
 
+  const hideError = () => {
+    errorElement.style.display = "none";
+  };
+  const showError = (s: string) => {
+    errorElement.textContent = s;
+    errorElement.style.display = "initial";
+  };
+
   verifyElement.addEventListener("click", async () => {
     assert(registeredCoursesInput.files !== null);
     assert(studentsInput.files !== null);
@@ -602,28 +630,49 @@ async function main() {
       return;
     }
 
-    // TODO: show parsing errors
+    hideError();
+
     const registeredCoursesText = await registeredCoursesFile.text();
     const registeredCoursesCsv = parseCsv(registeredCoursesText);
-    assert(registeredCoursesCsv !== undefined);
+    if (registeredCoursesCsv === undefined) {
+      showError("履修情報ファイルのCSV形式が正しくありません");
+      return;
+    }
     const maybeRegisteredCourses = parseRegisteredCourses(registeredCoursesCsv);
-    assert(maybeRegisteredCourses.kind === "ok");
+    if (maybeRegisteredCourses.kind === "error") {
+      showError(
+        formatParseRegisteredCoursesError(maybeRegisteredCourses.error),
+      );
+      return;
+    }
     const { registeredCourseId: registeredCourses } = maybeRegisteredCourses;
 
-    // TODO: show parsing errors
     const studentsText = await studentsFile.text();
     const studentsCsv = parseCsv(studentsText);
-    assert(studentsCsv !== undefined);
+    if (studentsCsv === undefined) {
+      showError("学籍情報ファイルのCSV形式が正しくありません");
+      return;
+    }
     const maybeStudents = parseStudents(studentsCsv);
-    assert(maybeStudents.kind === "ok");
+    if (maybeStudents.kind === "error") {
+      showError(formatParseStudentsError(maybeStudents.error));
+      return;
+    }
     const { students } = maybeStudents;
 
-    // TODO: show parsing errors
     const coursesArrayBuffer = await coursesFile.arrayBuffer();
     const coursesWorkbook = new Workbook();
-    await coursesWorkbook.xlsx.load(coursesArrayBuffer);
+    try {
+      await coursesWorkbook.xlsx.load(coursesArrayBuffer);
+    } catch {
+      showError("班別名簿ファイルがExcelファイルではないか壊れています");
+      return;
+    }
     const maybeCourses = parseCourses(coursesWorkbook);
-    assert(maybeCourses.kind === "ok");
+    if (maybeCourses.kind === "error") {
+      showError(formatParseCoursesError(maybeCourses.error));
+      return;
+    }
     const { courses } = maybeCourses;
 
     studentsInWrongCourseElement.hide();
