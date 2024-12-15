@@ -8,6 +8,10 @@ body::after {
   height: 50vh;
 }
 
+label {
+  vertical-align: top;
+}
+
 table,
 th,
 td {
