@@ -489,6 +489,15 @@ function fillInNoCourseTemplate(
   return template;
 }
 
+function clickUri(uri: string) {
+  const a = document.createElement("a");
+  a.href = uri;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 const WRONG_COURSE_EMAIL_TEMPLATE_KEY = "wrong-course-email-template";
 const NO_COURSE_EMAIL_TEMPLATE_KEY = "no-course-email-template";
 
@@ -537,23 +546,39 @@ async function main() {
   const studentsInWrongCourseElement = StudentsInWrongCourseElement.from(
     mustGetElementById("students-in-wrong-course"),
     (student, expectedCourse) => {
-      const x = fillInWrongCourseTemplate(
+      const body = fillInWrongCourseTemplate(
         wrongCourseTextarea.value,
         student,
         expectedCourse,
       );
-      console.log(x);
+      const uri = createMailtoUri({
+        // TODO
+        subject: "TODO",
+        recipients: [student.schoolEmail],
+        cc: [student.personalEmail],
+        bcc: [],
+        body,
+      });
+      clickUri(uri);
     },
   );
   const studentsInNoCourseElement = StudentsInNoCourseElement.from(
     mustGetElementById("students-in-no-course"),
     (student, expectedCourse) => {
-      const x = fillInNoCourseTemplate(
+      const body = fillInNoCourseTemplate(
         wrongCourseTextarea.value,
         student,
         expectedCourse,
       );
-      console.log(x);
+      const uri = createMailtoUri({
+        // TODO
+        subject: "TODO",
+        recipients: [student.schoolEmail],
+        cc: [student.personalEmail],
+        bcc: [],
+        body,
+      });
+      clickUri(uri);
     },
   );
   assert(studentsInWrongCourseElement !== undefined);
