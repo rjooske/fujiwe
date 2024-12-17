@@ -273,6 +273,10 @@ class StudentsInWrongCourseElement {
     this.root.style.display = "initial";
   }
 
+  clear() {
+    this.tbody.replaceChildren();
+  }
+
   addStudent(student: StudentInWrongCourse, expectedCourse: Course) {
     const row = StudentsInWrongCourseElement.newRow(this.rowTemplate);
     assert(row !== undefined);
@@ -358,6 +362,10 @@ class StudentsInNoCourseElement {
 
   show() {
     this.root.style.display = "initial";
+  }
+
+  clear() {
+    this.tbody.replaceChildren();
   }
 
   addStudent(student: Student, expectedCourse: Course) {
@@ -625,6 +633,10 @@ function main() {
     }
 
     hideError();
+    studentsInWrongCourseElement.hide();
+    studentsInNoCourseElement.hide();
+    studentsInWrongCourseElement.clear();
+    studentsInNoCourseElement.clear();
 
     const registeredCoursesText = await registeredCoursesFile.text();
     const registeredCoursesCsv = parseCsv(registeredCoursesText);
@@ -668,9 +680,6 @@ function main() {
       return;
     }
     const { courses } = maybeCourses;
-
-    studentsInWrongCourseElement.hide();
-    studentsInNoCourseElement.hide();
 
     const discrepancies = findRegistrationDiscrepancies(
       registeredCourses,
