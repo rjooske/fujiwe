@@ -22,7 +22,7 @@
     <button id="verify">確認</button><br />
 
     <section>
-      <h3>誤った授業を履修している学生へのメール:</h3>
+      <h3>誤った授業を履修している学生へのメール</h3>
       <label for="email-subject-wrong-course">件名:</label>
       <input type="text" id="email-subject-wrong-course" /><br />
       <label for="email-template-wrong-course">本文:</label>
@@ -30,7 +30,7 @@
     </section>
 
     <section>
-      <h3>履修登録をしていない学生へのメール:</h3>
+      <h3>履修登録をしていない学生へのメール</h3>
       <label for="email-subject-no-course">件名:</label>
       <input type="text" id="email-subject-no-course" /><br />
       <label for="email-template-no-course">本文:</label>
@@ -39,8 +39,10 @@
 
     <p id="error" style="display: none; color: #ee0000"></p>
 
+    <h2 id="input-course-name"></h2>
+
     <section id="students-in-wrong-course" style="display: none">
-      <h2>履修する授業を間違えている学生</h2>
+      <h3>履修する授業を間違えている学生</h3>
       <table>
         <template>
           <tr>
@@ -66,7 +68,7 @@
     </section>
 
     <section id="students-in-no-course" style="display: none">
-      <h2>履修登録をしていない学生</h2>
+      <h3>履修登録をしていない学生</h3>
       <table>
         <template>
           <tr>

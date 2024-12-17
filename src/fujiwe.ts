@@ -7,6 +7,7 @@ export type Email = Nominal<string, "Email">;
 
 export type Course = {
   id: CourseId;
+  name: string;
   expectedStudents: StudentId[];
   targetName: string;
 };

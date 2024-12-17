@@ -138,7 +138,12 @@ function allCells(sheet: Worksheet): Cell[] {
 
 type ParseCoursesError = {
   kind: "missing-cell";
-  cell: "course-id-label" | "course-id" | "student-id-label";
+  cell:
+    | "course-id-label"
+    | "course-id"
+    | "course-name-label"
+    | "course-name"
+    | "student-id-label";
   sheetName: string;
 };
 type ParseCoursesResult =
@@ -167,7 +172,6 @@ function parseCourses(workbook: Workbook): ParseCoursesResult {
         },
       };
     }
-
     const courseIdCell = sheet.findCell(
       courseIdLabelCell.fullAddress.row,
       courseIdLabelCell.fullAddress.col + 1,
@@ -178,6 +182,32 @@ function parseCourses(workbook: Workbook): ParseCoursesResult {
         error: {
           kind: "missing-cell",
           cell: "course-id",
+          sheetName: sheet.name,
+        },
+      };
+    }
+
+    const courseNameLabelCell = cells.find((c) => c.text.trim() === "科目名：");
+    if (courseNameLabelCell === undefined) {
+      return {
+        kind: "error",
+        error: {
+          kind: "missing-cell",
+          cell: "course-name-label",
+          sheetName: sheet.name,
+        },
+      };
+    }
+    const courseNameCell = sheet.findCell(
+      courseNameLabelCell.fullAddress.row,
+      courseNameLabelCell.fullAddress.col + 1,
+    );
+    if (courseNameCell === undefined) {
+      return {
+        kind: "error",
+        error: {
+          kind: "missing-cell",
+          cell: "course-name",
           sheetName: sheet.name,
         },
       };
@@ -209,6 +239,7 @@ function parseCourses(workbook: Workbook): ParseCoursesResult {
     const courseId = courseIdCell.text.trim() as CourseId;
     courses.set(courseId, {
       id: courseId,
+      name: courseNameCell.text.trim(),
       expectedStudents,
       targetName: sheet.name,
     });
@@ -445,6 +476,7 @@ function fillInWrongCourseTemplate(
     ["$expected_course_target", expectedCourse.targetName],
     ["$registered_course_id", student.registeredCourse.id],
     ["$registered_course_target", student.registeredCourse.targetName],
+    ["$course_name", expectedCourse.name],
   ];
   for (const [pattern, replacement] of variables) {
     template = template.replaceAll(pattern, replacement);
@@ -462,6 +494,7 @@ function fillInNoCourseTemplate(
     ["$student_name", student.name],
     ["$expected_course_id", expectedCourse.id],
     ["$expected_course_target", expectedCourse.targetName],
+    ["$course_name", expectedCourse.name],
   ];
   for (const [pattern, replacement] of variables) {
     template = template.replaceAll(pattern, replacement);
@@ -509,12 +542,22 @@ function formatParseCoursesError(e: ParseCoursesError): string {
         case "course-id":
           s += "科目番号";
           break;
+        case "course-name-label":
+          s += "科目名ラベル";
+          break;
+        case "course-name":
+          s += "科目名";
+          break;
         case "student-id-label":
           s += "学籍番号ラベル";
           break;
+        default:
+          unreachable(e.cell);
       }
       s += "のセルが存在しません";
       return s;
+    default:
+      unreachable(e.kind);
   }
 }
 
@@ -527,6 +570,7 @@ function main() {
   const registeredCoursesInput = mustGetElementById("input-registered-courses");
   const studentsInput = mustGetElementById("input-students");
   const coursesInput = mustGetElementById("input-courses");
+  const inputCourseNameElement = mustGetElementById("input-course-name");
   const verifyElement = mustGetElementById("verify");
   const wrongCourseSubject = mustGetElementById("email-subject-wrong-course");
   const wrongCourseTemplate = mustGetElementById("email-template-wrong-course");
@@ -633,6 +677,7 @@ function main() {
     }
 
     hideError();
+    inputCourseNameElement.textContent = "";
     studentsInWrongCourseElement.hide();
     studentsInNoCourseElement.hide();
     studentsInWrongCourseElement.clear();
@@ -680,6 +725,12 @@ function main() {
       return;
     }
     const { courses } = maybeCourses;
+
+    // TODO: we're assuming that all courses have the same name
+    const randomCourse = Array.from(courses.values()).at(0);
+    if (randomCourse !== undefined) {
+      inputCourseNameElement.textContent = "授業名: " + randomCourse.name;
+    }
 
     const discrepancies = findRegistrationDiscrepancies(
       registeredCourses,
