@@ -297,18 +297,16 @@ class StudentsInWrongCourseElement {
       }
     | undefined {
     const template = cloneTemplate(t);
-    // TODO: make sure there's only one tr
-    const tr = template.querySelector("tr");
-    if (tr === null) {
+    const tr = exactlyOne(template.querySelectorAll("tr"));
+    if (tr === undefined) {
       return undefined;
     }
     const tds = Array.from(tr.querySelectorAll("td"));
     if (tds.length !== 5) {
       return undefined;
     }
-    // TODO: make sure there's only one button
-    const emailButton = template.querySelector("button");
-    if (emailButton === null) {
+    const emailButton = exactlyOne(template.querySelectorAll("button"));
+    if (emailButton === undefined) {
       return undefined;
     }
     return {
@@ -328,14 +326,13 @@ class StudentsInWrongCourseElement {
       expectedCourse: Course,
     ) => void,
   ): StudentsInWrongCourseElement | undefined {
-    // TODO: make sure there's only one tbody
-    const tbody = root.querySelector("tbody");
-    // TODO: better checks
-    const rowTemplate = root.querySelector("template");
-    if (tbody === null || rowTemplate === null) {
-      return undefined;
-    }
-    if (StudentsInWrongCourseElement.newRow(rowTemplate) === undefined) {
+    const tbody = exactlyOne(root.querySelectorAll("tbody"));
+    const rowTemplate = exactlyOne(root.querySelectorAll("template"));
+    if (
+      tbody === undefined ||
+      rowTemplate === undefined ||
+      StudentsInWrongCourseElement.newRow(rowTemplate) === undefined
+    ) {
       return undefined;
     }
     return new StudentsInWrongCourseElement(
@@ -385,18 +382,16 @@ class StudentsInNoCourseElement {
       }
     | undefined {
     const template = cloneTemplate(t);
-    // TODO: make sure there's only one tr
-    const tr = template.querySelector("tr");
-    if (tr === null) {
+    const tr = exactlyOne(template.querySelectorAll("tr"));
+    if (tr === undefined) {
       return undefined;
     }
     const tds = Array.from(tr.querySelectorAll("td"));
     if (tds.length !== 4) {
       return undefined;
     }
-    // TODO: make sure there's only one button
-    const emailButton = template.querySelector("button");
-    if (emailButton === null) {
+    const emailButton = exactlyOne(template.querySelectorAll("button"));
+    if (emailButton === undefined) {
       return undefined;
     }
     return {
@@ -412,14 +407,13 @@ class StudentsInNoCourseElement {
     root: HTMLElement,
     onEmailButtonClicked: (s: Student, expectedCourse: Course) => void,
   ): StudentsInNoCourseElement | undefined {
-    // TODO: make sure there's only one tbody
-    const tbody = root.querySelector("tbody");
-    // TODO: better checks
-    const rowTemplate = root.querySelector("template");
-    if (tbody === null || rowTemplate === null) {
-      return undefined;
-    }
-    if (StudentsInNoCourseElement.newRow(rowTemplate) === undefined) {
+    const tbody = exactlyOne(root.querySelectorAll("tbody"));
+    const rowTemplate = exactlyOne(root.querySelectorAll("template"));
+    if (
+      tbody === undefined ||
+      rowTemplate === undefined ||
+      StudentsInNoCourseElement.newRow(rowTemplate) === undefined
+    ) {
       return undefined;
     }
     return new StudentsInNoCourseElement(
