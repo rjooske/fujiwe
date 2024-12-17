@@ -57,7 +57,9 @@ function parseCsv(s: string): Csv | undefined {
   }
 }
 
-type ParseRegisteredCoursesError = { kind: "missing-column"; column: string };
+type ParseRegisteredCoursesError =
+  | { kind: "missing-column"; column: string }
+  | { kind: "bad-deletion-value"; value: string };
 type ParseRegisteredCoursesResult =
   | { kind: "ok"; registeredCourseId: Map<StudentId, CourseId> }
   | { kind: "error"; error: ParseRegisteredCoursesError };
@@ -65,9 +67,9 @@ type ParseRegisteredCoursesResult =
 function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
   const studentIdColumn = "学籍番号";
   const courseIdColumn = "科目番号";
-  const deletedColumn = "論理削除";
+  const deletionColumn = "論理削除";
 
-  for (const column of [studentIdColumn, courseIdColumn, deletedColumn]) {
+  for (const column of [studentIdColumn, courseIdColumn, deletionColumn]) {
     if (!csv.columns.includes(column)) {
       return { kind: "error", error: { kind: "missing-column", column } };
     }
@@ -75,7 +77,15 @@ function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
 
   const registeredCourseId = new Map<StudentId, CourseId>();
   for (const record of csv.records) {
-    // TODO: deletion
+    const deletion = record[deletionColumn];
+    if (deletion === "○") {
+      continue;
+    } else if (deletion !== "") {
+      return {
+        kind: "error",
+        error: { kind: "bad-deletion-value", value: deletion },
+      };
+    }
     // TODO: remove type assertions
     registeredCourseId.set(
       record[studentIdColumn] as StudentId,
@@ -517,8 +527,10 @@ function formatParseRegisteredCoursesError(
   switch (e.kind) {
     case "missing-column":
       return `履修情報ファイルに列「${e.column}」が存在しません`;
+    case "bad-deletion-value":
+      return `履修情報ファイルの論理削除列に不正な値「${e.value}」が存在します`;
     default:
-      unreachable(e.kind);
+      unreachable(e);
   }
 }
 
