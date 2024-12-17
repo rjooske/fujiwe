@@ -313,8 +313,8 @@ class StudentsInWrongCourseElement {
     assert(row !== undefined);
     row.studentIdTd.textContent = student.id;
     row.studentNameTd.textContent = student.name;
-    row.expectedCourseTd.textContent = expectedCourse.id;
-    row.registeredCourseTd.textContent = student.registeredCourse.id;
+    row.expectedCourseTd.textContent = `${expectedCourse.id} (${expectedCourse.targetName})`;
+    row.registeredCourseTd.textContent = `${student.registeredCourse.id} (${student.registeredCourse.targetName})`;
     row.emailButton.addEventListener("click", () => {
       this.onEmailButtonClicked(student, expectedCourse);
     });
@@ -404,7 +404,7 @@ class StudentsInNoCourseElement {
     assert(row !== undefined);
     row.studentIdTd.textContent = student.id;
     row.studentNameTd.textContent = student.name;
-    row.expectedCourseTd.textContent = expectedCourse.id;
+    row.expectedCourseTd.textContent = `${expectedCourse.id} (${expectedCourse.targetName})`;
     row.emailButton.addEventListener("click", () => {
       this.onEmailButtonClicked(student, expectedCourse);
     });
