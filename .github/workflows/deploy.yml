@@ -17,6 +17,6 @@ jobs:
       - run: npm i && npm run build
       - uses: actions/upload-pages-artifact@v2
         with:
-          path: "public"
+          path: "build"
       - uses: actions/deploy-pages@v3
         id: deploy-pages-step

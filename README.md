@@ -1,3 +1,3 @@
 # フジヱ
 
-![フジヱ](public/images/fujiwe.png)
+![フジヱ](static/images/fujiwe.png)
