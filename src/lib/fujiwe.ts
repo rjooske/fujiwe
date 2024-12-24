@@ -21,47 +21,59 @@ export type Student = {
 
 export type StudentInWrongCourse = Student & {
   registeredCourse: Course;
+  expectedCourse: Course;
+};
+
+export type StudentInNoCourse = Student & {
+  expectedCourse: Course;
 };
 
 export type StudentInUnknownCourse = Student & {
   unknownCourseId: CourseId;
 };
 
-export type RegistrationDiscrepancy = {
+export type StudentWithoutDetails = {
+  id: StudentId;
   expectedCourse: Course;
-  studentsInWrongCourse: StudentInWrongCourse[];
-  studentsInNoCourse: Student[];
-  studentsInUnknownCourse: StudentInUnknownCourse[];
-  studentsWithoutDetails: StudentId[];
 };
 
-export function findRegistrationDiscrepancies(
+export type RegistrationDiscrepancy = {
+  studentsInWrongCourse: StudentInWrongCourse[];
+  studentsInNoCourse: StudentInNoCourse[];
+  studentsInUnknownCourse: StudentInUnknownCourse[];
+  studentsWithoutDetails: StudentWithoutDetails[];
+};
+
+export function findRegistrationDiscrepancy(
   registeredCourseIds: Map<StudentId, CourseId>,
   students: Map<StudentId, Student>,
   courses: Map<CourseId, Course>,
-): RegistrationDiscrepancy[] {
-  const discrepancies: RegistrationDiscrepancy[] = [];
+): RegistrationDiscrepancy {
+  const discrepancy: RegistrationDiscrepancy = {
+    studentsInWrongCourse: [],
+    studentsInNoCourse: [],
+    studentsInUnknownCourse: [],
+    studentsWithoutDetails: [],
+  };
 
   for (const course of courses.values()) {
-    const discrepancy: RegistrationDiscrepancy = {
-      expectedCourse: course,
-      studentsInWrongCourse: [],
-      studentsInNoCourse: [],
-      studentsInUnknownCourse: [],
-      studentsWithoutDetails: [],
-    };
-
     for (const studentId of course.expectedStudents) {
       const student = students.get(studentId);
       if (student === undefined) {
-        discrepancy.studentsWithoutDetails.push(studentId);
+        discrepancy.studentsWithoutDetails.push({
+          id: studentId,
+          expectedCourse: course,
+        });
         continue;
       }
 
       const registeredCourseId = registeredCourseIds.get(studentId);
       if (registeredCourseId === undefined) {
         // Student hasn't registered any course
-        discrepancy.studentsInNoCourse.push(student);
+        discrepancy.studentsInNoCourse.push({
+          ...student,
+          expectedCourse: course,
+        });
       } else if (registeredCourseId !== course.id) {
         // Student has registered the wrong course
         const registeredCourse = courses.get(registeredCourseId);
@@ -74,13 +86,12 @@ export function findRegistrationDiscrepancies(
           discrepancy.studentsInWrongCourse.push({
             ...student,
             registeredCourse,
+            expectedCourse: course,
           });
         }
       }
     }
-
-    discrepancies.push(discrepancy);
   }
 
-  return discrepancies;
+  return discrepancy;
 }
