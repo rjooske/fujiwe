@@ -172,6 +172,10 @@
 </svelte:head>
 
 <h1>フジヱ</h1>
+<a href="manual">説明ページ</a>
+<br />
+<br />
+
 <FujiweDialogComponent dialog={fujiweDialog} />
 <br />
 
