@@ -49,6 +49,7 @@
   oninput={() => {
     localStorage.setItem(ids.subject, template.subject);
   }}
+  style="width: 40em;"
 />
 <br />
 <label for={ids.body}>本文:</label>
