@@ -112,15 +112,17 @@
   let studentsFiles = $state<FileList | undefined>();
   let coursesFiles = $state<FileList | undefined>();
 
-  let verifyButtonDisabled = $derived(
+  let verifyButtonDisabledBecauseFiles = $derived(
     ![registeredCoursesFiles, studentsFiles, coursesFiles].every(
       (x) => x?.length === 1,
     ),
   );
+  let verifyButtonDisabledBecauseProcessing = $state(false);
 
   function error(message: string) {
-    alert(message);
+    verifyButtonDisabledBecauseProcessing = false;
     onFileInputError();
+    alert(message);
   }
 
   async function handleVerify() {
@@ -136,6 +138,7 @@
     }
 
     onFileInputStart();
+    verifyButtonDisabledBecauseProcessing = true;
 
     const registeredCoursesText = await registeredCoursesFile.text();
     const registeredCoursesCsv = parseCsv(registeredCoursesText);
@@ -187,6 +190,7 @@
       courseName = randomCourse.name;
     }
 
+    verifyButtonDisabledBecauseProcessing = false;
     onFileInputSuccess({
       courseName,
       registeredCourseIds,
@@ -214,8 +218,17 @@
 <input type="file" id="input-courses" bind:files={coursesFiles} />
 <br />
 
-<button id="verify" disabled={verifyButtonDisabled} onclick={handleVerify}>
-  確認
+<button
+  id="verify"
+  disabled={verifyButtonDisabledBecauseFiles ||
+    verifyButtonDisabledBecauseProcessing}
+  onclick={handleVerify}
+>
+  {#if verifyButtonDisabledBecauseProcessing}
+    処理中...
+  {:else}
+    確認
+  {/if}
 </button>
 <br />
 
