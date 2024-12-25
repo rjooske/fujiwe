@@ -142,10 +142,9 @@ export function parseCourses(workbook: Workbook): ParseCoursesResult {
   for (const sheet of workbook.worksheets) {
     const cells = allCells(sheet);
 
-    // TODO: better label
-    // if (!cells.some((c) => c.text.trim() === "fujiwe")) {
-    //   continue;
-    // }
+    if (!cells.some((c) => c.text.trim() === "fujiwe")) {
+      continue;
+    }
 
     const courseIdLabelCell = cells.find((c) => c.text.trim() === "科目番号：");
     if (courseIdLabelCell === undefined) {
