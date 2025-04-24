@@ -25,9 +25,9 @@
 
 <h2>授業名: {output.courseName}</h2>
 
-<h3>履修する授業を間違えている学生</h3>
+<h3>誤った授業を履修している学生</h3>
 {#if output.discrepancy.studentsInWrongCourse.length === 0}
-  <p>履修する授業を間違えている学生はいません。</p>
+  <p>誤った授業を履修している学生はいません。</p>
 {:else}
   <table>
     <thead>
