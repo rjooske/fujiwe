@@ -24,22 +24,17 @@
     type EmailTemplate,
   } from "./EmailTemplateInput.svelte";
   import type { Course, CourseId, Student, StudentId } from "$lib/fujiwe";
+  import { onMount } from "svelte";
   const { Workbook } = exceljs;
 
   function unreachable(_: never): never {
     throw new Error("should be unreachable");
   }
 
-  function exactlyOne<T>(ts: Iterable<T>): T | undefined {
-    let result: T | undefined;
-    for (const t of ts) {
-      if (result === undefined) {
-        result = t;
-      } else {
-        return undefined;
-      }
+  function assert(b: boolean): asserts b {
+    if (!b) {
+      throw new Error("assertion failed");
     }
-    return result;
   }
 
   function formatParseRegisteredCoursesError(
@@ -108,16 +103,47 @@
     onFileInputError: () => unknown;
   } = $props();
 
-  let registeredCoursesFiles = $state<FileList | undefined>();
-  let studentsFiles = $state<FileList | undefined>();
-  let coursesFiles = $state<FileList | undefined>();
+  let registeredCoursesInput = $state<HTMLInputElement | undefined>();
+  let studentsInput = $state<HTMLInputElement | undefined>();
+  let coursesInput = $state<HTMLInputElement | undefined>();
+  let inputFiles = $state<{
+    registeredCourses: File | undefined;
+    students: File | undefined;
+    courses: File | undefined;
+  }>({
+    registeredCourses: undefined,
+    students: undefined,
+    courses: undefined,
+  });
 
   let verifyButtonDisabledBecauseFiles = $derived(
-    ![registeredCoursesFiles, studentsFiles, coursesFiles].every(
-      (x) => x?.length === 1,
+    !(
+      inputFiles.registeredCourses !== undefined &&
+      inputFiles.students !== undefined &&
+      inputFiles.courses !== undefined
     ),
   );
   let verifyButtonDisabledBecauseProcessing = $state(false);
+
+  function updateInputFiles() {
+    if (
+      registeredCoursesInput === undefined ||
+      studentsInput === undefined ||
+      coursesInput === undefined
+    ) {
+      return;
+    }
+    assert(registeredCoursesInput.files !== null);
+    assert(studentsInput.files !== null);
+    assert(coursesInput.files !== null);
+    inputFiles = {
+      registeredCourses: registeredCoursesInput.files[0],
+      students: studentsInput.files[0],
+      courses: coursesInput.files[0],
+    };
+  }
+
+  onMount(updateInputFiles);
 
   function error(message: string) {
     verifyButtonDisabledBecauseProcessing = false;
@@ -126,9 +152,9 @@
   }
 
   async function handleVerify() {
-    const registeredCoursesFile = exactlyOne(registeredCoursesFiles ?? []);
-    const studentsFile = exactlyOne(studentsFiles ?? []);
-    const coursesFile = exactlyOne(coursesFiles ?? []);
+    const registeredCoursesFile = inputFiles.registeredCourses;
+    const studentsFile = inputFiles.students;
+    const coursesFile = inputFiles.courses;
     if (
       registeredCoursesFile === undefined ||
       studentsFile === undefined ||
@@ -206,16 +232,27 @@
 <input
   type="file"
   id="input-registered-courses"
-  bind:files={registeredCoursesFiles}
+  bind:this={registeredCoursesInput}
+  onchange={updateInputFiles}
 />
 <br />
 
 <label for="input-students">学籍情報:</label>
-<input type="file" id="input-students" bind:files={studentsFiles} />
+<input
+  type="file"
+  id="input-students"
+  bind:this={studentsInput}
+  onchange={updateInputFiles}
+/>
 <br />
 
 <label for="input-courses">班別名簿:</label>
-<input type="file" id="input-courses" bind:files={coursesFiles} />
+<input
+  type="file"
+  id="input-courses"
+  bind:this={coursesInput}
+  onchange={updateInputFiles}
+/>
 <br />
 
 <button
