@@ -20,9 +20,7 @@
   type MailtoUriParams = {
     recipients: string[];
     cc: string[];
-    bcc: string[];
     subject: string;
-    body: string;
   };
 
   function createMailtoUri(p: MailtoUriParams): string {
@@ -31,12 +29,8 @@
       p.recipients.map(encodeURIComponent).join(",") +
       "?cc=" +
       p.cc.map(encodeURIComponent).join(",") +
-      "&bcc=" +
-      p.bcc.map(encodeURIComponent).join(",") +
       "&subject=" +
-      encodeURIComponent(p.subject) +
-      "&body=" +
-      encodeURIComponent(p.body)
+      encodeURIComponent(p.subject)
     );
   }
 
@@ -134,7 +128,7 @@
     }
   }
 
-  function sendWrongCourseEmail(student: StudentInWrongCourse) {
+  async function sendWrongCourseEmail(student: StudentInWrongCourse) {
     const body = fillInWrongCourseTemplate(
       wrongCourseEmailTemplate.body,
       student,
@@ -144,13 +138,12 @@
       subject: wrongCourseEmailTemplate.subject,
       recipients: [student.schoolEmail],
       cc: [student.personalEmail],
-      bcc: [],
-      body,
     });
+    await navigator.clipboard.writeText(body);
     clickUri(uri);
   }
 
-  function sendNoCourseEmail(student: StudentInNoCourse) {
+  async function sendNoCourseEmail(student: StudentInNoCourse) {
     const body = fillInNoCourseTemplate(
       noCourseEmailTemplate.body,
       student,
@@ -160,9 +153,8 @@
       subject: noCourseEmailTemplate.subject,
       recipients: [student.schoolEmail],
       cc: [student.personalEmail],
-      bcc: [],
-      body,
     });
+    await navigator.clipboard.writeText(body);
     clickUri(uri);
   }
 </script>
