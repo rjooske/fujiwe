@@ -45,15 +45,15 @@
     & > div {
       position: absolute;
       top: 100px;
-      left: 220px;
+      left: 260px;
 
       & > div {
         margin: 0;
         position: absolute;
-        top: 20px;
+        top: 21px;
         left: 60px;
-        right: 20px;
-        bottom: 30px;
+        width: 208px;
+        height: 120px;
         display: grid;
         place-content: center;
       }
