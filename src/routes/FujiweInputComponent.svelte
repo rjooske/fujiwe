@@ -6,6 +6,7 @@
     courses: Map<CourseId, Course>;
     wrongCourseEmailTemplate: EmailTemplate;
     noCourseEmailTemplate: EmailTemplate;
+    courseIdToModuleName: Map<CourseId, ModuleName>;
   };
 </script>
 
@@ -23,7 +24,13 @@
   import EmailTemplateInput, {
     type EmailTemplate,
   } from "./EmailTemplateInput.svelte";
-  import type { Course, CourseId, Student, StudentId } from "$lib/fujiwe";
+  import type {
+    Course,
+    CourseId,
+    ModuleName,
+    Student,
+    StudentId,
+  } from "$lib/fujiwe";
   import { onMount } from "svelte";
   const { Workbook } = exceljs;
 
@@ -177,7 +184,8 @@
       error(formatParseRegisteredCoursesError(maybeRegisteredCourses.error));
       return;
     }
-    const { registeredCourseIds } = maybeRegisteredCourses;
+    const { registeredCourseIds, courseIdToModuleName } =
+      maybeRegisteredCourses;
 
     const studentsText = await studentsFile.text();
     const studentsCsv = parseCsv(studentsText);
@@ -224,6 +232,7 @@
       courses,
       wrongCourseEmailTemplate,
       noCourseEmailTemplate,
+      courseIdToModuleName,
     });
   }
 </script>

@@ -3,6 +3,7 @@ import {
   type Course,
   type CourseId,
   type Email,
+  type ModuleName,
   type Student,
   type StudentId,
 } from "./fujiwe";
@@ -37,21 +38,31 @@ export type ParseRegisteredCoursesError =
   | { kind: "missing-column"; column: string }
   | { kind: "bad-deletion-value"; value: string };
 export type ParseRegisteredCoursesResult =
-  | { kind: "ok"; registeredCourseIds: Map<StudentId, CourseId> }
+  | {
+      kind: "ok";
+      registeredCourseIds: Map<StudentId, CourseId>;
+      courseIdToModuleName: Map<CourseId, ModuleName>;
+    }
   | { kind: "error"; error: ParseRegisteredCoursesError };
 
 export function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
   const studentIdColumn = "学籍番号";
   const courseIdColumn = "科目番号";
   const deletionColumn = "論理削除";
+  const moduleNameColumn = "モジュール名";
 
-  for (const column of [studentIdColumn, courseIdColumn, deletionColumn]) {
+  for (const column of [
+    studentIdColumn,
+    courseIdColumn,
+    deletionColumn,
+    moduleNameColumn,
+  ]) {
     if (!csv.columns.includes(column)) {
       return { kind: "error", error: { kind: "missing-column", column } };
     }
   }
 
-  const registeredCourseId = new Map<StudentId, CourseId>();
+  const registeredCourseIds = new Map<StudentId, CourseId>();
   for (const record of csv.records) {
     const deletion = record[deletionColumn];
     if (deletion === "○") {
@@ -63,13 +74,24 @@ export function parseRegisteredCourses(csv: Csv): ParseRegisteredCoursesResult {
       };
     }
     // TODO: remove type assertions
-    registeredCourseId.set(
+    registeredCourseIds.set(
       record[studentIdColumn] as StudentId,
       record[courseIdColumn] as CourseId,
     );
   }
 
-  return { kind: "ok", registeredCourseIds: registeredCourseId };
+  // NOTE: we assume consistent mapping from a course id to a module name when
+  // there are multiple rows with the same course id
+  const courseIdToModuleName = new Map<CourseId, ModuleName>();
+  for (const record of csv.records) {
+    // TODO: remove type assertions
+    courseIdToModuleName.set(
+      record[courseIdColumn] as CourseId,
+      record[moduleNameColumn] as ModuleName,
+    );
+  }
+
+  return { kind: "ok", registeredCourseIds, courseIdToModuleName };
 }
 
 export type ParseStudentsError = { kind: "missing-column"; column: string };

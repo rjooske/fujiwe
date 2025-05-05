@@ -4,6 +4,7 @@ type Nominal<T, Identifier> = T & { [nominalIdentifier]: Identifier };
 export type CourseId = Nominal<string, "CourseId">;
 export type StudentId = Nominal<string, "StudentId">;
 export type Email = Nominal<string, "Email">;
+export type ModuleName = Nominal<string, "ModuleName">;
 
 export type Course = {
   id: CourseId;

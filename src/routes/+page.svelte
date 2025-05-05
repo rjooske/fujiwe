@@ -110,7 +110,11 @@
       input.students,
       input.courses,
     );
-    fujiweOutput = { discrepancy, courseName: input.courseName };
+    fujiweOutput = {
+      courseName: input.courseName,
+      discrepancy,
+      courseIdToModuleName: input.courseIdToModuleName,
+    };
 
     if (
       discrepancy.studentsInWrongCourse.length > 0 ||
